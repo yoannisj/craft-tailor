@@ -1,7 +1,6 @@
 {
   "name": "yoannisj/craft-tailor",
   "description": "Utilities to help with writing modular Twig templates in Craft CMS",
-  "version": "1.0.0",
   "type": "craft-plugin",
   "license": "MIT",
   "authors": [
