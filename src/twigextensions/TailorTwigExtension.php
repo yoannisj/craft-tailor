@@ -39,9 +39,6 @@ class TailorTwigExtension extends AbstractExtension
     {
         return [
 
-            //  {{ clone(object) }}
-            new TwigFunction('clone', [$this, 'cloneObject']),
-
             // {{ getType(value) }}
             new TwigFunction('getType', [$this, 'getType'], []),
 
@@ -141,16 +138,6 @@ class TailorTwigExtension extends AbstractExtension
 
     // =Callables
     // ========================================================================
-
-    /**
-     * @param {object} $object
-     */
-
-    public function cloneObject( object $object ): object
-    {
-        $clone = clone $object;
-        return $clone;
-    }
 
     /**
      * Returns the PHP type of given value. It's a wrapper around
