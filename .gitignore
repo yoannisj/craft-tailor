@@ -1,3 +1,7 @@
+# Environment
+# -----------
+.env
+
 # Composer
 # --------
 composer.phar
