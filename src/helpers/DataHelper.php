@@ -167,6 +167,8 @@ class DataHelper
      * @param array $criteria
      *
      * @return array
+     * 
+     * @todo: Remove workaround for Neo issue #387 once it is fixed
      */
 
     public static function fetchAll( $query, array $criteria = null ): array
@@ -177,6 +179,8 @@ class DataHelper
 
         if (is_array($query) && ArrayHelper::isIndexed($query))
         {
+            $query = static::_cleanDuplicateNeoBlocks($query);
+
             if ($criteria) {
                 $query = static::applyCriteriaToList($query, $criteria);
             }
@@ -190,7 +194,20 @@ class DataHelper
                 Craft::configure($query, $criteria);
             }
 
-            return $query->all();
+            $results = $query->all();
+            $results = static::_cleanDuplicateNeoBlocks($results);
+
+            // support eager loading for Neo Block queries
+            // @link https://github.com/spicywebau/craft-neo/blob/master/docs/eager-loading.md
+            if (Craft::$app->getPlugins()->isPluginInstalled('neo')
+                && $query instanceof \benf\neo\elements\db\BlockQuery)
+            {
+                foreach ($results as $block) {
+                    $block->useMemoized($query);
+                }
+            }
+
+            return $results;
         }
 
         return [];
@@ -305,7 +322,15 @@ class DataHelper
                 Craft::configure($query, $criteria);
             }
 
-            return $query->one();
+            $result = $query->one();
+
+            if (Craft::$app->getPlugins()->isPluginInstalled('neo')
+                && $query instanceof \benf\neo\elements\db\BlockQuery)
+            {
+                $result->useMemoized($query);
+            }
+
+            return $result;
         }
 
         // Accept a single result
@@ -829,6 +854,45 @@ class DataHelper
         }
 
         return $results;
+    }
+
+    // =Protected Methods
+    // -------------------------------------------------------------------------
+
+    // =Private Methods
+    // -------------------------------------------------------------------------
+
+    /** 
+     * Work around bug with eager-loaded neo queries returning duplicate blocks
+     * @link https://github.com/spicywebau/craft-neo/issues/387
+     * 
+     * @param array $blocks
+     * 
+     * @return array
+     */
+
+    private static function _cleanDuplicateNeoBlocks( $blocks ): array
+    {
+        $uniqueIds = [];
+        $cleanBlocks = [];
+
+        foreach ($blocks as $block)
+        {
+            if (Craft::$app->getPlugins()->isPluginEnabled('neo')
+                && $block instanceof \benf\neo\elements\Block)
+            {
+                if (!in_array($block->id, $uniqueIds)) {
+                    $uniqueIds[] = $block->id;
+                    $cleanBlocks[] = $block;
+                }
+            }
+
+            else {
+                $cleanBlocks[] = $block;
+            }
+        }
+
+        return $cleanBlocks;
     }
 
 }
