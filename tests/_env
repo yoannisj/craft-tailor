@@ -1,0 +1,7 @@
+DB_DSN="mysql:host=mysql;port=3306;dbname=dev_craftcms"
+
+DB_USER="root"
+DB_PASSWORD=""
+DB_TABLE_PREFIX=""
+SECURITY_KEY=""
+PRIMARY_SITE_URL="https://your-site-url.test/" # Set this to the `entryUrl` param in the `codeception.yml` file.
