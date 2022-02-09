@@ -16,7 +16,7 @@
         "docs": "https://github.com/yoannisj/craft-tailor/blob/master/README.md"
     },
     "require": {
-        "craftcms/cms": "^3.1.0"
+        "craftcms/cms": "^3.7.14"
     },
     "autoload": {
         "psr-4": {
@@ -29,7 +29,7 @@
         "class": "yoannisj\\tailor\\Tailor"
     },
     "require-dev": {
-        "codeception/codeception": "^4.1",
+        "codeception/codeception": "^4.1.29",
         "codeception/module-phpbrowser": "^1.0.0",
         "codeception/module-asserts": "^1.0.0",
         "vlucas/phpdotenv": "^3.0",
