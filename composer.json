@@ -34,5 +34,13 @@
         "codeception/module-asserts": "^1.0.0",
         "vlucas/phpdotenv": "^3.0",
         "codeception/module-yii2": "^1.1"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "allow-plugins": {
+            "yiisoft/yii2-composer": true,
+            "craftcms/plugin-installer": true
+        }
     }
 }
