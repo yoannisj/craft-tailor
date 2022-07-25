@@ -31,13 +31,13 @@ class AjaxActionResults extends Model
      * @var array
      */
 
-    public $params;
+    public array|object|null $params;
 
     /**
      * @var array
      */
 
-    private $_snippets;
+    private ?array $_snippets;
 
     // =Public Methods
     // ======================≠======================≠======================≠===
@@ -46,20 +46,20 @@ class AjaxActionResults extends Model
      * @inheritdoc
      */
 
-    public function init()
+    public function init(): void
     {
+        parent::init();
+
         if (!isset($this->params)) {
             $this->params = Craft::$app->getRequest()->getBodyParams();
         }
-
-        parent::init();
     }
 
     /**
      * @inheritdoc
      */
 
-    public function fields()
+    public function fields(): array
     {
         $fields = parent::fields();
 
@@ -74,9 +74,8 @@ class AjaxActionResults extends Model
 
     public function getSnippets(): array
     {
-        if (!isset($this->_snippets))
-        {
-            return Tailor::$plugin->getAjax()->renderSnippets($this->params);
+        if (!isset($this->_snippets)) {
+            return Tailor::$plugin->ajax->renderSnippets($this->params);
         }
 
         return $this->_snippets;

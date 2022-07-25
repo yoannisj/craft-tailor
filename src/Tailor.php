@@ -11,12 +11,11 @@
 
 namespace yoannisj\tailor;
 
+use yii\base\BaseObject;
 use yii\base\Event;
 
 use Craft;
-use craft\base\Component;
 use craft\base\Plugin;
-use craft\web\View;
 use craft\web\twig\variables\CraftVariable;
 
 use yoannisj\tailor\services\Markup;
@@ -28,6 +27,10 @@ use yoannisj\tailor\twigextensions\TailorTwigExtension;
 /**
  * Plugin class for Craft Tailor, loading all of the plugins functionality in the system.
  * Gets instanciated at the beginning of every request to Craft, if the plugin is installed and enabled
+ * 
+ * @property-read Markup $markup The plugin's Markup service instance (singleton)
+ * @property-read Pathmasks $pathmasks The plugin's Pathmasks service instance (singleton)
+ * @property-read Ajax $ajax The plugin's Ajax service instance (singleton)
  */
 
 class Tailor extends Plugin
@@ -39,17 +42,20 @@ class Tailor extends Plugin
      * Normalizes value as an instance of given object class
      *
      * @param string $class Class the normalized object should be an instance of
-     * @param array | object $value Existing object or configuration array
+     * @param array|object $value Existing object or configuration array
      * @param array $defaults Optional values for missing object properties
      *
-     * @return object | null Class instance object if value could be normalized
+     * @return ?object Class instance object if value could be normalized
      */
 
-    public static function normalizeObject( string $class, $object, array $defaults = [] )
+    public static function normalizeObject(
+        string $class, array|object $object, array $defaults = [] ): ?object
     {
         if (is_array($object))
         {
             $props = $object;
+
+            /** @var BaseObject $object */
             $object = Craft::createObject($class);
 
             foreach ($props as $name => $value)
@@ -81,11 +87,10 @@ class Tailor extends Plugin
     // =========================================================================
 
     /**
-     * reference to the plugin's instance
-     * @var Plugin
+     * @var Plugin Reference to the plugin's instance
      */
 
-    public static $plugin;
+    public static Plugin $plugin;
 
     // =Public Methods
     // =========================================================================
@@ -95,7 +100,7 @@ class Tailor extends Plugin
      * This is where all of the plugin's functionality gets loaded into the system
      */
 
-    public function init()
+    public function init(): void
     {
         parent::init();
 

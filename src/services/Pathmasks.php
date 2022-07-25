@@ -81,7 +81,8 @@ class Pathmasks extends Component
      * @return array
      */
 
-    public function parsePathmask( string $mask, $object = null, array $vars = [] )
+    public function parsePathmask(
+        string $mask, array|object|null $object = null, array $vars = [] ): array
     {
         // Accept an array of pathmasks
         if (is_array($mask)) {
@@ -130,10 +131,13 @@ class Pathmasks extends Component
      * @param Mixed $object
      * @param array $vars
      *
-     * @return string | array
+     * @return string|array
+     * 
+     * @todo: actually check filesystem to return first file found, and cache results
      */
 
-    public function resolvePathmask( string $mask, $object = null, array $vars = [] )
+    public function resolvePathmask(
+        string $mask, array|object|null $object = null, array $vars = [] ): string|array
     {
         return $this->parsePathmask($mask, $object, $vars);
     }

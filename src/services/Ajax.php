@@ -25,12 +25,12 @@ class Ajax extends Component
     // ======================≠======================≠======================≠===
 
     /**
-     * @param array $params All params received with ajax request
+     * @param array|null $params All params received with ajax request
      *
      * @return array Rendered snippet data to include in ajax response
      */
 
-    public function renderSnippets( array $params = null )
+    public function renderSnippets( array $params = null ): array
     {
         if (!$params || !array_key_exists('snippets', $params)) {
             return [];

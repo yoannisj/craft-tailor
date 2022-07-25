@@ -16,6 +16,8 @@ use Twig\Extension\AbstractExtension;
 use Twig\TwigFunction;
 use Twig\TwigFilter;
 
+use yii\db\Query;
+
 use Craft;
 use craft\helpers\ArrayHelper;
 
@@ -35,7 +37,10 @@ class TailorTwigExtension extends AbstractExtension
     // =Functions
     // ========================================================================
 
-    public function getFunctions()
+    /**
+     * @inheritdoc
+     */
+    public function getFunctions(): array
     {
         return [
 
@@ -101,26 +106,6 @@ class TailorTwigExtension extends AbstractExtension
                 'needs_context' => true,
             ]),
 
-            // // {{ get_node_attrs(key) }}
-            // new TwigFunction('get_node_attrs', [$this, 'getNodeAttributes'], [
-            //     'needs_context' => true,
-            // ]),
-
-            // // {{ set_node_attrs(key[, value ]) }}
-            // new TwigFunction('set_node_attrs', [$this, 'setNodeAttributes'], [
-            //     'needs_context' => true,
-            // ]),
-
-            // // {{ add_node_attrs(key[, value, $merge ]) }}
-            // new TwigFunction('add_node_attrs', [$this, 'addNodeAttributes'], [
-            //     'needs_context' => true,
-            // ]),
-
-            // // {{ node_attrs(key[, value ]) }}
-            // new TwigFunction('node_attrs', [$this, 'nodeAttributes'], [
-            //     'needs_context' => true,
-            // ]),
-
         ];
     }
 
@@ -128,11 +113,10 @@ class TailorTwigExtension extends AbstractExtension
      * @inheritdoc
      */
 
-    public function getFilters()
+    public function getFilters(): array
     {
         return [
-            new TwigFilter('replaceTag', [$this, 'replaceTag'], [
-            ]),
+            new TwigFilter('replaceTag', [$this, 'replaceTag'], []),
         ];
     }
 
@@ -148,28 +132,28 @@ class TailorTwigExtension extends AbstractExtension
      * @return string
      */
 
-    public function getType( $value )
+    public function getType( mixed $value ): string
     {
         return gettype($value);
     }
 
     /**
      * Returns the full classnames of given PHP object. It's acts like a
-     * wrapper around PHP's builtin `get_classname` function, with the
-     * difference that it will return `null` if given value is not an object.
+     * wrapper around PHP's builtin `get_class` function, with the difference
+     * that it will return `null` if given value is not an object.
      *
-     * @param mixed $value
+     * @param mixed $object
      *
-     * @return string | null
+     * @return string|null
      */
 
-    public function getClass( $object )
+    public function getClass( mixed $object ): ?string
     {
         if (!is_object($object)) {
             return null;
         }
 
-        return get_classname($object);
+        return get_Class($object);
     }
 
     /**
@@ -177,14 +161,15 @@ class TailorTwigExtension extends AbstractExtension
      * Supports nested keys using dot notation, and an array of preferred keys
      * to return the first non-null (or optionally non-empty) value.
      *
-     * @param object | array $data
-     * @param string | array $key
+     * @param object|array $data
+     * @param string|array $key
      * @param bool $allowEmpty
      *
      * @return mixed
      */
 
-    public function prop( $data, $key, $allowEmpty = true )
+    public function prop( object|array $data, string|array $key,
+        bool $allowEmpty = true ): mixed
     {
         return DataHelper::prop($data, $key, $allowEmpty);
     }
@@ -194,17 +179,18 @@ class TailorTwigExtension extends AbstractExtension
      * associative array property value. Supports eager-loaded list of values,
      * by filtering items as expected by given fetch method.
      *
-     * @param array | object $data object or associative array to access
-     * @param string | array $key name of property on which to run the fetch method
+     * @param array|object $data object or associative array to access
+     * @param string|array $key name of property on which to run the fetch method
      * @param bool $allowEmpty (optional) whether empty property values can be considered
-     * @param string $method Fetch method to use
+     * @param string|null $method Fetch method to use
      * @param array $criteria Query criteria to apply
      * @param args.. arguments passed to the fetch method (after property value)
      *
      * @return mixed Fetch results
      */
 
-    public function fetchProp( $data, $key, $allowEmpty, $method = null )
+    public function fetchProp( object|array $data, string|array $key,
+        bool $allowEmpty = true, string $method = null ): mixed
     {
         return forward_static_call_array([DataHelper::class, 'fetchProp'], func_get_args());
     }
@@ -213,13 +199,13 @@ class TailorTwigExtension extends AbstractExtension
      * Fetches all resutlfs for given query.
      * Supports eager-loaded list of values.
      *
-     * @param yii\db\Query | array $query the base query used to fetch results
-     * @param array $criteria
+     * @param array|Query|null $query the base query used to fetch results
+     * @param array|null $criteria
      *
      * @return array
      */
 
-    public function fetchAll( $query, array $criteria = null ): array
+    public function fetchAll( array|Query|null $query, array $criteria = null ): array
     {
         return DataHelper::fetchAll($query, $criteria);
     }
@@ -228,13 +214,13 @@ class TailorTwigExtension extends AbstractExtension
      * Fetches total count of given query results
      * Supports eager-loaded list of values.
      *
-     * @param yii\db\Query | array the base query used to fetch results
+     * @param array|Query|null the base query used to fetch results
      * @param array $criteria
      *
      * @return integer
      */
 
-    public function fetchCount( $query, array $criteria = null ): int
+    public function fetchCount( array|Query|null $query, array $criteria = null ): int
     {
         return DataHelper::fetchCount($query, $criteria);
     }
@@ -242,13 +228,13 @@ class TailorTwigExtension extends AbstractExtension
     /**
      * Fetches whether given query returns any results
      *
-     * @param \yii\db\Query | array $query
-     * @param array $criteria
+     * @param array|Query|null $query
+     * @param array|null $criteria
      *
      * @return bool
      */
 
-    public function fetchExists( $query, array $criteria = null ): bool
+    public function fetchExists( array|Query|null $query, array $criteria = null ): bool
     {
         return DataHelper::fetchExists($query, $criteria);
     }
@@ -257,22 +243,22 @@ class TailorTwigExtension extends AbstractExtension
      * Fetches one of given query's results.
      * Supports eager-loaded list of values.
      *
-     * @param yii\db\Query | array the base query used to fetch results
-     * @param array $criteria
+     * @param array|object|null the base query used to fetch results
+     * @param array|null $criteria
      *
      * @return mixed
      */
 
-    public function fetchOne( $query, array $criteria = null )
+    public function fetchOne( array|object|null $query, array $criteria = null ): mixed
     {
         return DataHelper::fetchOne($query, $criteria);
     }
 
     /**
-     * Alias for `fetchOne()`
+     * @alias for `fetchOne()`
      */
 
-    public function fetchFirst( $query, array $criteria = null )
+    public function fetchFirst( array|object|null $query, array $criteria = null ): mixed
     {
         return DataHelper::fetchFirst($query, $criteria);
     }
@@ -281,71 +267,66 @@ class TailorTwigExtension extends AbstractExtension
      * Fetches last of given query's results.
      * Supports eager-loaded list of values.
      *
-     * @param yii\db\Query | array the base query used to fetch results
+     * @param array|object|null $query The base query used to fetch results
      * @param array $criteria
      *
      * @return mixed
      */
 
-    public function fetchLast( $query, array $criteria = null )
+    public function fetchLast( array|object|null $query, array $criteria = null ): mixed
     {
         return DataHelper::fetchLast($query, $criteria);
     }
 
     /**
-     * Fetches nth result for given query.
-     * Supports eager-loaded list of values.
+     * Fetches nth result for given query. Supports eager-loaded list of values.
      *
-     * @param yii\db\Query | array the abse query used to fetch results
-     * @param array $criteria
+     * @param array|object|null $query the base query used to fetch results
+     * @param array|null $criteria
      *
      * @return mixed
      */
 
-    public function fetchNth( $query, int $index, array $criteria = null ): array
+    public function fetchNth( array|object|null $query, int $index, array $criteria = null ): array
     {
         return DataHelper::fetchNth($query, $index, $criteria);
     }
 
     /**
-     *
+     * @see `craft\tailor\services\Markup::renderSnippets()`
      */
 
-    public function snippets( string $position )
+    public function snippets( string $position ): string
     {
-        $markup = Tailor::$plugin->markup->renderSnippets( $position );
-        return $markup;
+        return Tailor::$plugin->markup->renderSnippets( $position );
     }
 
     /**
-     *
+     * @see `craft\tailor\services\Markup::addSnippet()`
      */
 
-    public function addSnippet( string $position, string $path, array $vars = null, bool $unique = false )
+    public function addSnippet(
+        string $position, string $path, array $vars = null, bool $unique = false ): bool
     {
         return Tailor::$plugin->markup->addSnippet($position, $path, $vars, $unique);
     }
 
     /**
-     * Callable for twig `pathmask` function, which resolves given path mask
-     *
-     * @param string $mask
-     * @param mixed $object
-     * @param array $vars
-     *
-     * @return string | array
+     * @see `Pathmasks::resolvePathmask()`
      */
 
-    public function pathmask( string $mask, $object = null, array $vars = [] )
+    public function pathmask(
+        string $mask, $object = null, array $vars = [] ): string|array
     {
         return Tailor::$plugin->pathmasks->resolvePathmask($mask, $object, $vars);
     }
 
     /**
-     *
+     * @see `craft\tailor\helpers\MarkupHelper::resolvePathmask()`
      */
 
-    public function replaceTag( string $markup, string $tag, string $replacement, bool $preserveAttrs = true )
+    public function replaceTag(
+        string $markup, string $tag, string $replacement, bool $preserveAttrs = true ): string
     {
         return MarkupHelper::replaceTag($markup, $tag, $replacement, $preserveAttrs);
     }
@@ -356,14 +337,15 @@ class TailorTwigExtension extends AbstractExtension
      * If given $classnames argument is a string, it will use the classname values
      * found under that key in the context.
      *
-     * @param array $context
-     * @param array | string $classnames
-     * @param array | string $values
+     * @param array $context Current Twig context (i.e. variables)
+     * @param string|array $classnames Classnames to compose
+     * @param string|array|null $values Classname values when composing a sub-key (i.e. node)
      *
      * @return array
      */
 
-    public function composeClassnames( &$context, $classnames, $values = null ): array
+    public function composeClassnames(
+        array &$context, string|array $classnames, string|array|null $values = null ): array
     {
         // accept string as `$classnames` argument
         if (is_string($classnames)) {
@@ -374,21 +356,21 @@ class TailorTwigExtension extends AbstractExtension
     }
 
     /**
-     * Callable for twig `addClassnames` function, which adds given
-     * classname values to list of registered classnames.
-     * If no key is given, the values will be merged into the root
-     * classnames in current context.
+     * Callable for twig `addClassnames` function, which adds given classname
+     * values to list of registered classnames. If no key is given, the values
+     * will be merged into the root classnames in current context.
      *
      * Returns the new list of registered classnames for $key
      *
      * @param array &$context
-     * @param string $key
-     * @param string | array $values
+     * @param string|array $key
+     * @param string|array|null $values
      *
      * @return array
      */
 
-    public function addClassnames( &$context, $key, $values = null ): array
+    public function addClassnames(
+        array &$context, string|array $key, string|array|null $values = null ): array
     {
         // allow omitting the `$key` argument
         if (is_null($values))
@@ -420,12 +402,12 @@ class TailorTwigExtension extends AbstractExtension
      * context. 
      *
      * @param array $context
-     * @param string $key [null]
+     * @param string|null $key [null]
      *
      * @return array
      */
 
-    public function getClassnames( &$context, $key = null )
+    public function getClassnames( array &$context, string|null $key = null ): array
     {
         $classnames = $context['classnames'] ?? [];
 
@@ -455,13 +437,13 @@ class TailorTwigExtension extends AbstractExtension
      * '.' notation).
      * If no key is given, it will return 'root' classnames from current context
      *
-     * @param Array $context
+     * @param array $context
      * @param string $key
      *
-     * @return String 
+     * @return string|null
      */
 
-    public function classnames( &$context, $key = 'root' )
+    public function classnames( array &$context, string $key = 'root' ): ?string
     {
         if ($classnames = $this->getClassnames($context, $key))
         {
@@ -482,62 +464,6 @@ class TailorTwigExtension extends AbstractExtension
         }
 
         return null;
-    }
-
-    /**
-     * Callable for twig function 'get_node_attrs', which sets the value for a given
-     * attribute keypath
-     * 
-     * @param Mixed $context
-     * @param string $key
-     */
-
-    public function getNodeAttributes( &$context, string $keypath )
-    {
-        $keypath = 'attrs.' . $keypath;
-        return ArrayHelper::getValue($context, $keypath, null);
-    }
-
-    /**
-     * Callable for twig function 'set_node_attrs', which sets the value for a given
-     * attribute keypath (overrides whatever value was registered before)
-     *
-     * @param Mixed $context
-     * @param string $keypath
-     * @param Mixed $value
-     */
-
-    public function setNodeAttributes( &$context, string $keypath, $value )
-    {
-
-    }
-
-    /**
-     * Callable for twig function 'add_node_attrs', which adds value to given attribute
-     * keypath (preserves previously registered values)
-     * 
-     * @param Mixed $context
-     * @param string $keypath
-     * @param Mixed $value
-     * @param Bool | String | Array $concat
-     */
-
-    public function addNodeAttributes( &$context, string $keypath, $value, $concat = false )
-    {
-
-    }
-
-    /**
-     * Callable for twig function 'node_attrs', which outputs the attributes 
-     * previously registed for given keypath
-     *
-     * @param Mixed $context
-     * @param string $keypath
-     */
-
-    public function nodeAttrributes( &$context, string $keypath )
-    {
-
     }
 
 }

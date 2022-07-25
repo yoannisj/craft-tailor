@@ -27,19 +27,19 @@ class ModelListValidator extends Validator
      * @var string
      */
 
-    public $model;
+    public ?string $model;
 
     /**
      * @var bool
      */
 
-    public $mustValidate = true;
+    public bool $mustValidate = true;
 
     /**
      * @inheritdoc
      */
 
-    public function init()
+    public function init(): void
     {
         if (!isset($this->model)) {
             throw new InvalidConfigException('ModelListValidator missing required `model` parameter.');
@@ -59,7 +59,7 @@ class ModelListValidator extends Validator
      * @inheritdoc
      */
 
-    public function validateValue( $value )
+    protected function validateValue( mixed $value ): ?array
     {
         if (!is_array($value)) {
             return [ $this->message, ['model' => $this->model] ];

@@ -38,11 +38,9 @@ class ParamHelper
      * 
      */
 
-    public static function parseParams( $params ): array
+    public static function parseParams( string|array|null $params ): array
     {
-        if (!$params || empty($params)) {
-            return [];
-        }
+        if (empty($params)) return [];
 
         if (is_array($params))
         {
@@ -55,7 +53,6 @@ class ParamHelper
             foreach ($params as $prm)
             {
                 $name = $prm['name'] ?? null;
-
                 if ($name)
                 {
                     $value = $prm['value'] ?? true;
@@ -109,14 +106,15 @@ class ParamHelper
      *
      * @todo: support comparing more than two hashes
      *
-     * @param array | string $params the params that are being tested
-     * @param array | string $values the params to test against
+     * @param string|array|null $params the params that are being tested
+     * @param string|array|null $values the params to test against
      * @param bool $strict (optional)
      *
      * @return bool
      */
 
-    public static function matchParams( $params, $values, bool $strict = false ): bool
+    public static function matchParams(
+        string|array|null $params, string|array|null $values, bool $strict = false ): bool
     {
         $params = static::parseParams($params);
         $values = static::parseParams($values);
@@ -149,16 +147,16 @@ class ParamHelper
      * Collect all values found in multiple param maps
      *
      * @param bool $unique (optional)
-     * @param [ array, ... ] param map(s) to collect from
+     * @param string|array|null[] param map(s) to collect from
      *
      * @return array
      */
 
-    public function collectValues( ): array
+    public function collectValues( ...$params ): array
     {
-        $params = func_get_args();
         $unique = true;
 
+        // allow omitting the 'unique' argument in first position
         if (gettype($params[0]) == 'boolean')
         {
             $params = array_slice($params, 1);

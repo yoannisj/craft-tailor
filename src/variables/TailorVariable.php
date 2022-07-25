@@ -23,6 +23,7 @@ use craft\elements\Category;
 use craft\elements\Tag;
 use craft\elements\MatrixBlock;
 use craft\elements\User;
+use craft\helpers\ArrayHelper;
 
 use yoannisj\tailor\Tailor;
 use yoannisj\tailor\helpers\ParamHelper;
@@ -34,122 +35,146 @@ use yoannisj\tailor\helpers\ParamHelper;
 class TailorVariable
 {
     /**
+     * @param mixed $value
+     * 
      * @return bool
      */
 
-    public function isQuery( $value ): bool
+    public function isQuery( mixed $value ): bool
     {
         return ($value instanceof Query);
     }
 
     /**
+     * @param mixed $value
+     * 
      * @return bool
      */
 
-    public function isElement( $value ): bool
+    public function isElement( mixed $value ): bool
     {
         return ($value instanceof ElementInterface);
     }
 
     /**
+     *@param mixed $value
+     * 
      * @return bool
      */
 
-    public function isBlock( $value ): bool
+    public function isBlock( mixed $value ): bool
     {
         return ($value instanceof BlockElementInterface);
     }
 
     /**
+     * @param mixed $value
+     * 
      * @return bool
      */
 
-    public function isGlobalset( $value ): bool
+    public function isGlobalset( mixed $value ): bool
     {
         return ($value instanceof Globalset);
     }
 
     /**
+     * @param mixed $value
+     * 
      * @return bool
      */
 
-    public function isEntry( $value ): bool
+    public function isEntry( mixed $value ): bool
     {
         return ($value instanceof Entry);
     }
 
     /**
+     * @param mixed $value
+     * 
      * @return bool
      */
 
-    public function isAsset( $value ): bool
+    public function isAsset( mixed $value ): bool
     {
         return ($value instanceof Asset);
     }
 
     /**
+     * @param mixed $value
+     * 
      * @return bool
      */
 
-    public function isCategory( $category ): bool
+    public function isCategory( mixed $value ): bool
     {
         return ($value instanceof Category);
     }
 
     /**
+     * @param mixed $value
+     * 
      * @return bool
      */
 
-    public function isTag( $value ): bool
+    public function isTag( mixed $value ): bool
     {
         return ($value instanceof Tag);
     }
 
     /**
+     * @param mixed $value
+     * 
      * @return bool
      */
 
-    public function isMatrixBlock( $value ): bool
+    public function isMatrixBlock( mixed $value ): bool
     {
         return ($value instanceof MatrixBlock);
     }
 
     /**
+     * @param mixed $value
+     * 
      * @return bool
      */
 
-    public function isUser( $value ): bool
+    public function isUser( mixed $value ): bool
     {
         return ($value instanceof User);
     }
 
     /**
+     * @param mixed $value
+     * 
      * @return string
      */
 
-    public function getType( $value )
+    public function getType( mixed $value ): string
     {
         return gettype($value);
     }
 
     /**
-     * @return string | null
+     * @param mixed $object
+     * 
+     * @return ?string
      */
 
-    public function getClass( $object )
+    public function getClass( mixed $object ): ?string
     {
         if (!is_object($object)) {
             return null;
         }
 
-        return get_classname($object);
+        return get_class($object);
     }
 
     /**
-     * 
+     * @param string|array|null
      */
 
-    public function parseParams( $params )
+    public function parseParams( string|array|null $params ): array
     {
         return ParamHelper::parseParams($params);
     }
@@ -158,9 +183,9 @@ class TailorVariable
      * 
      */
 
-    public function getRequestParams( array $paramNames, $defaults = null )
+    public function getRequestParams( array $paramNames, mixed $defaults = null ): array
     {
-        if (!is_array($defaults))
+        if (!is_array($defaults) && !ArrayHelper::isAssociative($defaults))
         {
             $defaultParams = [];
 
@@ -175,7 +200,7 @@ class TailorVariable
         $params = [];
 
         foreach ($paramNames as $name) {
-            $params[$name] = $request->getParam($name, $defaults[$name]);
+            $params[$name] = $request->getParam($name, $defaults[$name] ?? null);
         }
 
         return $params;
@@ -185,7 +210,7 @@ class TailorVariable
      * 
      */
 
-    public function matchRequestParams( $sample, bool $strict = false )
+    public function matchRequestParams( string|array|null $sample, bool $strict = false ): bool
     {
         $requestParams = $this->getRequestParams(array_keys($sample));
         return $this->matchParams($sample, $requestParams, $strict);
@@ -195,7 +220,8 @@ class TailorVariable
      *
      */
 
-    public function matchParams( $sample, $master, bool $strict = false )
+    public function matchParams(
+        string|array|null $sample, string|array|null $master, bool $strict = false ): bool
     {
         return ParamHelper::matchParams($sample, $master, $strict);
     }
@@ -204,7 +230,7 @@ class TailorVariable
      *
      */
 
-    public function parsePathmask( string $mask, $object = null, array $vars = [] )
+    public function parsePathmask( string $mask, array|object|null $object = null, array $vars = [] )
     {
         return Tailor::$plugin->pathmasks->parsePathmask($mask, $object, $vars);
     }
@@ -213,36 +239,9 @@ class TailorVariable
      *
      */
 
-    public function resolvePathmask( string $mask, $object = null, array $vars = [] )
+    public function resolvePathmask( string $mask, array|object|null $object = null, array $vars = [] ): array
     {
         return Tailor::$plugin->pathmasks->resolvePathmask($mask, $object, $vars);
-    }
-
-    /**
-     *
-     */
-
-    public function getAttribute( array $attrs, string $key )
-    {
-        return Tailor::$plugin->markup->getAttribute($attrs, $key);
-    }
-
-    /**
-     *
-     */
-
-    public function addAttribute( array $attrs, string $key, $values )
-    {
-        return Tailor::$plugin->markup->addAttribute($attrs, $key, $value);
-    }
-
-    /**
-     *
-     */
-
-    public function setAttribute( array $attrs, string $key, $value )
-    {
-        return Tailor::$plugin->markup->setAttribute($attrs, $key, $value);
     }
 
 }

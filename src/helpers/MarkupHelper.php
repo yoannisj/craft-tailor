@@ -33,7 +33,8 @@ class MarkupHelper
      * @return string
      */
 
-    public static function replaceTag( string $markup, string $tag, string $replacement, bool $preserveAttrs = true ): string
+    public static function replaceTag(
+        string $markup, string $tag, string $replacement, bool $preserveAttrs = true ): string
     {
         // optimize for empty strings
         if (empty($markup)) return '';
@@ -62,11 +63,12 @@ class MarkupHelper
     /**
      * Parses and normalizes given map of classnames
      *
-     * @param Array | string $classnames
-     * @return Array
+     * @param string|array|null $classnames
+     * 
+     * @return array|null
      */
 
-    public static function parseClassMap( $classnames, $key = 'root' )
+    public static function parseClassMap( string|array|null $classnames, $key = 'root' ): ?array
     {
         if (is_string($classnames)) {
             $classnames = explode(' ', $classnames);
@@ -100,11 +102,12 @@ class MarkupHelper
     /**
      * Parses and normalizes given list of classnames
      *
-     * @param Array | string $classnames
-     * @return Array
+     * @param string|array|null $classnames
+     * 
+     * @return ?array
      */
 
-    public static function parseClassList( $classnames )
+    public static function parseClassList( string|array $classnames ): ?array
     {
         if (is_array($classnames))
         {
@@ -135,13 +138,14 @@ class MarkupHelper
     }
 
     /**
-     *
+     * @param string|array|null ...$maps 
+     * 
+     * @return array
      */
 
-    public static function composeClassnames(): array
+    public static function composeClassnames( ...$maps ): array
     {
         $classnames = static::parseClassMap([]);
-        $maps = func_get_args();
 
         foreach ($maps as $map)
         {

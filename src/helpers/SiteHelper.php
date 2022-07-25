@@ -12,14 +12,8 @@
 
 namespace yoannisj\tailor\helpers;
 
-use yii\base\InvalidCallException;
-use yii\base\InvalidArgumentException;
-use yii\base\UnkownPropertyException;
-
 use Craft;
-use craft\db\Query;
 use craft\models\Site;
-use craft\helpers\ArrayHelper;
 
 /**
  *
@@ -34,11 +28,12 @@ class SiteHelper
     // ========================================================================
 
     /**
-     * @param int | string | \craft\models\Site | null $site
-     * @return \craft\models\Site | null
+     * @param int|string|Site|null $site
+     * 
+     * @return ?Site
      */
 
-    public static function siteModel( $site = null )
+    public static function siteModel( string|int|Site|null $site = null ): ?Site
     {
         if (!$site) {
             return Craft::$app->getSites()->getCurrentSite();
@@ -64,11 +59,11 @@ class SiteHelper
     }
 
     /**
-     * @param int | string | \craft\models\Site | null $site
+     * @param int|string|Site|null $site
      * @return  int | null
      */
 
-    public static function siteId( $site = null )
+    public static function siteId( int|string|Site|null $site = null ): ?int
     {
         if (is_numeric($site)) {
             return (int)$site;
@@ -84,11 +79,11 @@ class SiteHelper
     }
 
     /**
-     * @param int | string | \craft\models\Site | null $site
-     * @return string | null
+     * @param int|string|Site|null $site
+     * @return string|null
      */
 
-    public static function siteHandle( $site = null )
+    public static function siteHandle( int|string|Site|null $site = null ): ?string
     {
         if (is_string($site) && !is_numeric($site)) {
             return $site;

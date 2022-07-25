@@ -34,10 +34,9 @@ class AjaxController extends Controller
 
     /**
      * @inheritdoc
-     * @var bool
      */
 
-    protected $allowAnonymous = true;
+    protected array|int|bool $allowAnonymous = true;
 
     // =Public Methods
     // ======================≠======================≠======================≠===

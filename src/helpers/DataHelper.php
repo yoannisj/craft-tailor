@@ -12,14 +12,16 @@
 
 namespace yoannisj\tailor\helpers;
 
-use yii\base\InvalidCallException;
 use yii\base\InvalidArgumentException;
-use yii\base\UnkownPropertyException;
+use yii\base\UnknownPropertyException;
+use yii\db\Query;
 
 use Craft;
-use craft\db\Query;
 use craft\models\Site;
 use craft\helpers\ArrayHelper;
+
+use benf\neo\elements\Block as NeoBlock;
+use benf\neo\elements\db\BlockQuery as NeoBlockQuery;
 
 /**
  *
@@ -50,14 +52,15 @@ class DataHelper
      * Supports nested properties using dot notation.
      * Accepts a list of prefered property names (will return first property that is set).
      *
-     * @param object | array $data object or associative array to access
-     * @param string | array $key name of property | array key to return
-     * @param bool $allowEmpty whether an empty value is satisfactory or not
+     * @param object|array $data Object or associative array to access
+     * @param string|array $key Name of property/array key to return
+     * @param bool $allowEmpty Whether an empty value is satisfactory or not
      * 
      * @return mixed
      */
 
-    public static function prop( $data, $key, bool $allowEmpty = true )
+    public static function prop( object|array $data, string|array $key,
+        bool $allowEmpty = true ): mixed
     {
         // // allow omitting the $default value
         // if (is_bool($default) && is_null($allowEmpty))
@@ -74,19 +77,8 @@ class DataHelper
         {
             foreach ($key as $k)
             {
-                try {
-                    $value = ArrayHelper::getValue($data, $k);
-                } catch (UnkownPropertyException $e) {
-                    $value = null;
-                }
-
-                if (!$allowEmpty && empty($value)) {
-                    continue;
-                }
-
-                if (!is_null($value)) {
-                    return $value;
-                }
+                $value = static::prop($data, $k, $allowEmpty);
+                if ($value !== null) return $value;
             }
 
             return null;
@@ -94,7 +86,7 @@ class DataHelper
 
         try {
             $value = ArrayHelper::getValue($data, $key);
-        } catch (UnkownPropertyException $e) {
+        } catch (UnknownPropertyException $e) {
             $value = null;
         }
 
@@ -112,8 +104,8 @@ class DataHelper
      * Accepts a list of prefered property names (will use first property that is set).
      * Supports eager-loaded property values, by filtering items according to given fetch method.
      *
-     * @param array | object $data object or associative array to access
-     * @param string | array $key name of property on which to run the fetch method
+     * @param array|object $data object or associative array to access
+     * @param string|array $key name of property on which to run the fetch method
      * @param bool $allowEmpty (optional) whether empty property values can be considered
      * @param string $method Fetch method to use
      * @param args.. arguments passed to the fetch method (after property value)
@@ -121,7 +113,8 @@ class DataHelper
      * @return mixed Fetch results
      */
 
-    public static function fetchProp( $data, $key, $allowEmpty, $method = null )
+    public static function fetchProp( array|object $data, string|array $key,
+        string|bool $allowEmpty, string $method = null ): mixed
     {
         $args = func_get_args();
         $fetchArgsStart = 4;
@@ -135,7 +128,7 @@ class DataHelper
         }
 
         if (!is_string($method)) {
-            throw new InvalidArgumentException('method argument must be a fetch method name');
+            throw new InvalidArgumentException('Argument `method` must be a fetch method name');
         }
 
         if (!in_array($method, [
@@ -147,7 +140,7 @@ class DataHelper
             self::FETCH_METHOD_LAST,
             self::FETCH_METHOD_NTH,
         ])) {
-            throw new InvalidArgumentException('method argument `'.$method.'` is not supported.');
+            throw new InvalidArgumentException('Fetch `method` "'.$method.'" is not supported.');
         }
 
         $query = static::prop($data, $key, $allowEmpty);
@@ -156,14 +149,14 @@ class DataHelper
         $fetchArgs = array_slice($args, $fetchArgsStart);
         array_unshift($fetchArgs, $query);
 
-        return forward_static_call_array([DataHelper::class, $fetchMethod], $fetchArgs);
+        return forward_static_call_array([ self::class, $fetchMethod ], $fetchArgs);
     }
 
     /**
      * Fetches all resutlfs for given query.
      * Supports eager-loaded list of values.
      *
-     * @param yii\db\Query | array $query the base query used to fetch results
+     * @param array|Query|null $query the base query used to fetch results
      * @param array $criteria
      *
      * @return array
@@ -171,11 +164,9 @@ class DataHelper
      * @todo: Remove workaround for Neo issue #387 once it is fixed
      */
 
-    public static function fetchAll( $query, array $criteria = null ): array
+    public static function fetchAll( array|Query|null $query, array $criteria = null ): array
     {
-        if (is_null($query)) {
-            return [];
-        }
+        if (empty($query)) return [];
 
         if (is_array($query) && ArrayHelper::isIndexed($query))
         {
@@ -200,7 +191,7 @@ class DataHelper
             // support eager loading for Neo Block queries
             // @link https://github.com/spicywebau/craft-neo/blob/master/docs/eager-loading.md
             if (Craft::$app->getPlugins()->isPluginInstalled('neo')
-                && $query instanceof \benf\neo\elements\db\BlockQuery)
+                && $query instanceof NeoBlockQuery)
             {
                 foreach ($results as $block) {
                     $block->useMemoized($query);
@@ -217,22 +208,20 @@ class DataHelper
      * Fetches total count of given query results
      * Supports eager-loaded list of values.
      *
-     * @param yii\db\Query | array the base query used to fetch results
+     * @param array|Query|null the base query used to fetch results
      * @param array $criteria
      *
      * @return integer
      */
 
-    public static function fetchCount( $query, array $criteria = null ): int
+    public static function fetchCount( array|Query|null $query, array $criteria = null ): int
     {
-        if (is_null($query)) {
-            return 0;
-        }
+        if (empty($query)) return 0;
 
         if (is_array($query) && ArrayHelper::isIndexed($query))
         {
             if ($criteria) {
-                $query = static::applyCriteriaToList($list, $criteria);
+                $query = static::applyCriteriaToList($query, $criteria);
             }
 
             return count($query);
@@ -253,17 +242,15 @@ class DataHelper
     /**
      * Fetches whether given query returns any results
      *
-     * @param \yii\db\Query | array $query
+     * @param array|Query|null $query
      * @param array $criteria
      *
      * @return bool
      */
 
-    public function fetchExists( $query, array $criteria = null ): bool
+    public static function fetchExists( array|Query|null $query, array $criteria = null ): bool
     {
-        if (empty($query)) {
-            return false;
-        }
+        if (empty($query)) return false;
 
         if (is_array($query) && ArrayHelper::isIndexed($query))
         {
@@ -295,17 +282,17 @@ class DataHelper
      * Fetches one of given query's results.
      * Supports eager-loaded list of values.
      *
-     * @param yii\db\Query | array the base query used to fetch results
+     * @param array|object|null the base query used to fetch results
      * @param array $criteria
      *
      * @return mixed
+     * 
+     * @todo: support scalar results
      */
 
-    public static function fetchOne( $query, array $criteria = null )
+    public static function fetchOne( array|object|null $query, array $criteria = null ): mixed
     {
-        if (empty($query)) {
-            return null;
-        }
+        if (empty($query)) return null;
 
         if (is_array($query) && ArrayHelper::isIndexed($query))
         {
@@ -322,15 +309,13 @@ class DataHelper
                 Craft::configure($query, $criteria);
             }
 
-            $result = $query->one();
-
             if (Craft::$app->getPlugins()->isPluginInstalled('neo')
-                && $query instanceof \benf\neo\elements\db\BlockQuery)
+                && $query instanceof NeoBlockQuery)
             {
-                $result->useMemoized($query);
+                $query->useMemoized($query);
             }
 
-            return $result;
+            return $query->one();
         }
 
         // Accept a single result
@@ -342,10 +327,10 @@ class DataHelper
     }
 
     /**
-     * Alias for `fetchOne()`
+     * @alias for `fetchOne()`
      */
 
-    public static function fetchFirst( $query, array $criteria = null )
+    public static function fetchFirst( array|object|null $query, array $criteria = null ): mixed
     {
         return static::fetchOne($query, $criteria);
     }
@@ -354,17 +339,15 @@ class DataHelper
      * Fetches last of given query's results.
      * Supports eager-loaded list of values.
      *
-     * @param yii\db\Query | array the base query used to fetch results
+     * @param array|object|null the base query used to fetch results
      * @param array $criteria
      *
      * @return mixed
      */
 
-    public static function fetchLast( $query, array $criteria = null )
+    public static function fetchLast( array|object|null $query, array $criteria = null ): mixed
     {
-        if (is_null($query)) {
-            return null;
-        }
+        if (empty($query)) return null;
 
         if (is_array($query) && ArrayHelper::isIndexed($query))
         {
@@ -372,7 +355,7 @@ class DataHelper
                 $query = static::applyCriteriaToList($query, $criteria);
             }
 
-            return ArrayHelper::lastValue($query);
+            return ArrayHelper::firstValue(array_reverse($query));
         }
 
         if ($query instanceof Query)
@@ -394,21 +377,18 @@ class DataHelper
     }
 
     /**
-     * Fetches nth result for given query.
-     * Supports eager-loaded list of values.
+     * Fetches nth result for given query. Supports eager-loaded list of values.
      *
-     * @param yii\db\Query | array the abse query used to fetch results
+     * @param array|object|null $query The base query used to fetch results
      * @param int $index position of result to fetch
-     * @param array $criteria
+     * @param array|null $criteria
      *
      * @return mixed
      */
 
-    public static function fetchNth( $query, int $index, array $criteria = null )
+    public static function fetchNth( array|object|null $query, int $index, array $criteria = null ): mixed
     {
-        if (is_null($query)) {
-            return null;
-        }
+        if (empty($query)) return null;
 
         if (is_array($query) && ArrayHelper::isIndexed($query))
         {
@@ -462,10 +442,14 @@ class DataHelper
     }
 
     /**
-     *
+     * @param array|Query|null $query
+     * @param array $conditions
+     * @param bool $strict
+     * 
+     * @return array
      */
 
-    public static function whereMultiple( array $query, array $conditions, bool $strict = false )
+    public static function whereMultiple( array|Query|null $query, array $conditions, bool $strict = false ): array
     {
         $res = [];
 
@@ -480,10 +464,14 @@ class DataHelper
     }
 
     /**
-     *
+     * @param array|Query|null $query
+     * @param array $conditions
+     * @param bool $strict
+     * 
+     * @return mixed
      */
 
-    public static function firstWhereMultiple( array $query, array $conditions, bool $strict = false )
+    public static function firstWhereMultiple( array|Query|null $query, array $conditions, bool $strict = false ): mixed
     {
         foreach ($query as $data)
         {
@@ -526,14 +514,14 @@ class DataHelper
     /**
      * Checks if an object or associative array matches given property conditions.
      *
-     * @param array | object $data object or associative array to check
+     * @param array|object $data object or associative array to check
      * @param array $conditions map of property values to check against
      * @param bool $strict whether it should use strict value comparison
      *
      * @return bool
      */
 
-    public static function checkProperties( $data, array $conditions, bool $strict = false ): bool
+    public static function checkProperties( array|object $data, array $conditions, bool $strict = false ): bool
     {
         foreach ($conditions as $key => $value)
         {
@@ -548,16 +536,17 @@ class DataHelper
     /**
      * Checks if an object or associative array matches given property condition
      * 
-     * @param object | array $data object or associative array to check
-     * @param string | array $key property name to check against
-     * @param mixed $value value, or list of values to m
+     * @param array|object $data object or associative array to check
+     * @param string|array $key property name to check against
+     * @param mixed $value value, or list of values to match against
+     * @param bool $strict
      *
      * @return bool
      */
 
-    public static function checkProperty( $data, $key, $value, bool $strict = false ): bool
+    public static function checkProperty( array|object $data, string|array $key, mixed $value, bool $strict = false ): bool
     {
-        $dataValue = static::prop($data, $key, $allowEmpty);
+        $dataValue = static::prop($data, $key);
 
         if (is_array($value)) {
             return in_array($dataValue, $value, $strict);
@@ -575,10 +564,13 @@ class DataHelper
     }
 
     /**
-     *
+     * @param mixed $left
+     * @param mixed $right
+     * 
+     * @return bool
      */
 
-    public static function isSame( $left, $right ): bool
+    public static function isSame( mixed $left, mixed $right ): bool
     {
         // optimise for strictly equal values
         if ($left === $right) return true;
@@ -794,7 +786,8 @@ class DataHelper
      * @return array
      */
 
-    public static function filterableData( array $items, string $index, string $criteria, array $columns = null ): array
+    public static function filterableData(
+        array $items, string $index, string $criteria, array $columns = null ): array
     {
         $results = [];
         $allCriteria = [];
@@ -805,8 +798,8 @@ class DataHelper
             $itemCriteria = ArrayHelper::getValue($item, $criteria) ?? [];
 
             // collect column for first mathing item
-            $itemColumns = empty($columns) ? arra_keys($item) : $columns;
-            $result = $results[$itemIndex] ?? ArrayHelper::filter($item, $columns);
+            $result = ($results[$itemIndex] ??
+                (empty($columns) ? $item : ArrayHelper::filter($item, $columns)));
 
             // collect unique criteria values
             $resultCriteria = $result[$criteria] ?? [];
@@ -871,7 +864,7 @@ class DataHelper
      * @return array
      */
 
-    private static function _cleanDuplicateNeoBlocks( $blocks ): array
+    private static function _cleanDuplicateNeoBlocks( array $blocks ): array
     {
         $uniqueIds = [];
         $cleanBlocks = [];
@@ -879,7 +872,7 @@ class DataHelper
         foreach ($blocks as $block)
         {
             if (Craft::$app->getPlugins()->isPluginEnabled('neo')
-                && $block instanceof \benf\neo\elements\Block)
+                && $block instanceof NeoBlock)
             {
                 if (!in_array($block->id, $uniqueIds)) {
                     $uniqueIds[] = $block->id;
