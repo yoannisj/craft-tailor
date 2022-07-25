@@ -12,6 +12,8 @@
 
 namespace yoannisj\tailor\helpers;
 
+use Illuminate\Support\Collection;
+
 use yii\base\InvalidArgumentException;
 use yii\base\UnknownPropertyException;
 use yii\db\Query;
@@ -156,7 +158,7 @@ class DataHelper
      * Fetches all resutlfs for given query.
      * Supports eager-loaded list of values.
      *
-     * @param array|Query|null $query the base query used to fetch results
+     * @param array|Query|Collection|null $query the base query used to fetch results
      * @param array $criteria
      *
      * @return array
@@ -164,9 +166,13 @@ class DataHelper
      * @todo: Remove workaround for Neo issue #387 once it is fixed
      */
 
-    public static function fetchAll( array|Query|null $query, array $criteria = null ): array
+    public static function fetchAll( array|Query|Collection|null $query, array $criteria = null ): array
     {
         if (empty($query)) return [];
+
+        if ($query instanceof Collection) {
+            $query = $query->all(); // work with underlying array to apply given criteria
+        }
 
         if (is_array($query) && ArrayHelper::isIndexed($query))
         {
@@ -194,7 +200,7 @@ class DataHelper
                 && $query instanceof NeoBlockQuery)
             {
                 foreach ($results as $block) {
-                    $block->useMemoized($query);
+                    $block->useMemoized($results);
                 }
             }
 
@@ -208,15 +214,19 @@ class DataHelper
      * Fetches total count of given query results
      * Supports eager-loaded list of values.
      *
-     * @param array|Query|null the base query used to fetch results
+     * @param array|Query|Collection|null the base query used to fetch results
      * @param array $criteria
      *
      * @return integer
      */
 
-    public static function fetchCount( array|Query|null $query, array $criteria = null ): int
+    public static function fetchCount( array|Query|Collection|null $query, array $criteria = null ): int
     {
         if (empty($query)) return 0;
+
+        if ($query instanceof Collection) {
+            $query = $query->all(); // work with underlying array to apply given criteria
+        }
 
         if (is_array($query) && ArrayHelper::isIndexed($query))
         {
@@ -242,15 +252,19 @@ class DataHelper
     /**
      * Fetches whether given query returns any results
      *
-     * @param array|Query|null $query
+     * @param array|Query|Collection|null $query
      * @param array $criteria
      *
      * @return bool
      */
 
-    public static function fetchExists( array|Query|null $query, array $criteria = null ): bool
+    public static function fetchExists( array|Query|Collection|null $query, array $criteria = null ): bool
     {
         if (empty($query)) return false;
+
+        if ($query instanceof Collection) {
+            $query = $query->all(); // work with underlying array to apply given criteria
+        }
 
         if (is_array($query) && ArrayHelper::isIndexed($query))
         {
@@ -294,6 +308,10 @@ class DataHelper
     {
         if (empty($query)) return null;
 
+        if ($query instanceof Collection) {
+            $query = $query->all(); // work with underlying array to apply given criteria
+        }
+
         if (is_array($query) && ArrayHelper::isIndexed($query))
         {
             if ($criteria) {
@@ -309,13 +327,16 @@ class DataHelper
                 Craft::configure($query, $criteria);
             }
 
+            $result = $query->one();
+
             if (Craft::$app->getPlugins()->isPluginInstalled('neo')
                 && $query instanceof NeoBlockQuery)
             {
-                $query->useMemoized($query);
+                /** @var NeoBlock $result */
+                $result->useMemoized([ $result ]);
             }
 
-            return $query->one();
+            return $result;
         }
 
         // Accept a single result
@@ -348,6 +369,10 @@ class DataHelper
     public static function fetchLast( array|object|null $query, array $criteria = null ): mixed
     {
         if (empty($query)) return null;
+
+        if ($query instanceof Collection) {
+            $query = $query->all(); // work with underlying array to apply given criteria
+        }
 
         if (is_array($query) && ArrayHelper::isIndexed($query))
         {
@@ -386,9 +411,14 @@ class DataHelper
      * @return mixed
      */
 
-    public static function fetchNth( array|object|null $query, int $index, array $criteria = null ): mixed
+    public static function fetchNth(
+        array|object|null $query, int $index, array $criteria = null ): mixed
     {
         if (empty($query)) return null;
+
+        if ($query instanceof Collection) {
+            $query = $query->all(); // work with underlying array to apply given criteria
+        }
 
         if (is_array($query) && ArrayHelper::isIndexed($query))
         {
@@ -442,18 +472,23 @@ class DataHelper
     }
 
     /**
-     * @param array|Query|null $query
+     * @param array|Query|Collection|null $items
      * @param array $conditions
      * @param bool $strict
      * 
      * @return array
      */
 
-    public static function whereMultiple( array|Query|null $query, array $conditions, bool $strict = false ): array
+    public static function whereMultiple(
+        array|Query|Collection|null $items, array $conditions, bool $strict = false ): array
     {
+        if ($items instanceof Query || $items instanceof Collection) {
+            $items = $items->all();
+        }
+
         $res = [];
 
-        foreach ($query as $data)
+        foreach ($items as $data)
         {
             if (static::checkProperties($data, $conditions, $strict)) {
                 $res[] = $data;
@@ -464,25 +499,30 @@ class DataHelper
     }
 
     /**
-     * @param array|Query|null $query
+     * @param array|Query|Collection|null $items
      * @param array $conditions
      * @param bool $strict
      * 
      * @return mixed
      */
 
-    public static function firstWhereMultiple( array|Query|null $query, array $conditions, bool $strict = false ): mixed
+    public static function firstWhereMultiple(
+        array|Query|Collection|null $items, array $conditions, bool $strict = false ): mixed
     {
-        foreach ($query as $data)
+        if ($items instanceof Query || $items instanceof Collection) {
+            $items = $items->all();
+        }
+
+        foreach ($items as $data)
         {
-            if (static::checkProperties($query, $conditions, $strict)) {
+            if (static::checkProperties($items, $conditions, $strict)) {
                 return $data;
             }
         }
 
         return null;
 
-        // foreach ($query as $data)
+        // foreach ($items as $data)
         // {
         //     foreach ($conditions as $key => $value)
         //     {
@@ -544,7 +584,8 @@ class DataHelper
      * @return bool
      */
 
-    public static function checkProperty( array|object $data, string|array $key, mixed $value, bool $strict = false ): bool
+    public static function checkProperty(
+        array|object $data, string|array $key, mixed $value, bool $strict = false ): bool
     {
         $dataValue = static::prop($data, $key);
 

@@ -15,9 +15,6 @@
         "source": "https://github.com/yoannisj/craft-tailor",
         "docs": "https://github.com/yoannisj/craft-tailor/blob/master/README.md"
     },
-    "require": {
-        "craftcms/cms": "^3.7.14"
-    },
     "autoload": {
         "psr-4": {
             "yoannisj\\tailor\\": "src/"
@@ -27,6 +24,9 @@
         "handle": "tailor",
         "name": "Tailor",
         "class": "yoannisj\\tailor\\Tailor"
+    },
+    "require": {
+        "craftcms/cms": "^4.0"
     },
     "require-dev": {
         "codeception/codeception": "^4.1.29",

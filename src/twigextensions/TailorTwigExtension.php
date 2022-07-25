@@ -12,6 +12,8 @@
 
 namespace yoannisj\tailor\twigextensions;
 
+use Illuminate\Support\Collection;
+
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFunction;
 use Twig\TwigFilter;
@@ -199,13 +201,13 @@ class TailorTwigExtension extends AbstractExtension
      * Fetches all resutlfs for given query.
      * Supports eager-loaded list of values.
      *
-     * @param array|Query|null $query the base query used to fetch results
+     * @param array|Query|Collection|null $query the base query used to fetch results
      * @param array|null $criteria
      *
      * @return array
      */
 
-    public function fetchAll( array|Query|null $query, array $criteria = null ): array
+    public function fetchAll( array|Query|Collection|null $query, array $criteria = null ): array
     {
         return DataHelper::fetchAll($query, $criteria);
     }
@@ -214,13 +216,13 @@ class TailorTwigExtension extends AbstractExtension
      * Fetches total count of given query results
      * Supports eager-loaded list of values.
      *
-     * @param array|Query|null the base query used to fetch results
+     * @param array|Query|Collection|null the base query used to fetch results
      * @param array $criteria
      *
      * @return integer
      */
 
-    public function fetchCount( array|Query|null $query, array $criteria = null ): int
+    public function fetchCount( array|Query|Collection|null $query, array $criteria = null ): int
     {
         return DataHelper::fetchCount($query, $criteria);
     }
@@ -228,13 +230,13 @@ class TailorTwigExtension extends AbstractExtension
     /**
      * Fetches whether given query returns any results
      *
-     * @param array|Query|null $query
+     * @param array|Query|Collection|null $query
      * @param array|null $criteria
      *
      * @return bool
      */
 
-    public function fetchExists( array|Query|null $query, array $criteria = null ): bool
+    public function fetchExists( array|Query|Collection|null $query, array $criteria = null ): bool
     {
         return DataHelper::fetchExists($query, $criteria);
     }
@@ -404,10 +406,10 @@ class TailorTwigExtension extends AbstractExtension
      * @param array $context
      * @param string|null $key [null]
      *
-     * @return array
+     * @return array|null
      */
 
-    public function getClassnames( array &$context, string|null $key = null ): array
+    public function getClassnames( array &$context, string|null $key = null ): ?array
     {
         $classnames = $context['classnames'] ?? [];
 
