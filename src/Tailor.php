@@ -39,6 +39,20 @@ class Tailor extends Plugin
     // =========================================================================
 
     /**
+     * @inheritdoc
+     */
+    public static function config(): array
+    {
+        return [
+            'components' => [
+                'markup' => Markup::class,
+                'pathmasks' => Pathmasks::class,
+                'ajax' => Ajax::class,
+            ],
+        ];
+    }
+
+    /**
      * Normalizes value as an instance of given object class
      *
      * @param string $class Class the normalized object should be an instance of
@@ -106,13 +120,6 @@ class Tailor extends Plugin
 
         // store reference to plugin instance
         self::$plugin = $this;
-
-        // register plugin services as components
-        $this->setComponents([
-            'markup' => Markup::class,
-            'pathmasks' => Pathmasks::class,
-            'ajax' => Ajax::class,
-        ]);
 
         // register twig extensions provided by the plugin
         $extension = new TailorTwigExtension();
