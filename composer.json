@@ -43,5 +43,14 @@
             "yiisoft/yii2-composer": true,
             "craftcms/plugin-installer": true
         }
+    },
+    "archive": {
+        "exclude": [
+          "tests",
+          "docker",
+          "docker-compose.yml",
+          ".env.example",
+          ".editorconfig"
+        ]
     }
 }

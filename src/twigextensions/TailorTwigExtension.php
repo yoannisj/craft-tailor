@@ -155,7 +155,7 @@ class TailorTwigExtension extends AbstractExtension
             return null;
         }
 
-        return get_Class($object);
+        return get_class($object);
     }
 
     /**

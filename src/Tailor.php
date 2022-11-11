@@ -15,14 +15,20 @@ use yii\base\BaseObject;
 use yii\base\Event;
 
 use Craft;
+use craft\base\Model;
 use craft\base\Plugin;
 use craft\web\twig\variables\CraftVariable;
+use craft\services\Elements;
+use craft\events\EagerLoadElementsEvent;
+use craft\helpers\App as AppHelper;
 
+use yoannisj\tailor\models\Settings;
 use yoannisj\tailor\services\Markup;
 use yoannisj\tailor\services\Pathmasks;
 use yoannisj\tailor\services\Ajax;
 use yoannisj\tailor\variables\TailorVariable;
 use yoannisj\tailor\twigextensions\TailorTwigExtension;
+use yoannisj\tailor\helpers\ContentHelper;
 
 /**
  * Plugin class for Craft Tailor, loading all of the plugins functionality in the system.
@@ -37,6 +43,12 @@ class Tailor extends Plugin
 {
     // =Static
     // =========================================================================
+
+    /**
+     * @var Plugin Reference to the plugin's instance
+     */
+
+    public static Plugin $plugin;
 
     /**
      * @inheritdoc
@@ -101,10 +113,39 @@ class Tailor extends Plugin
     // =========================================================================
 
     /**
-     * @var Plugin Reference to the plugin's instance
+     * @var bool Whether the SEOmatic plugin for Craft is installed
+     * @see https://plugins.craftcms.com/seomatic
      */
+    public bool $isSeomaticInstalled = false;
 
-    public static Plugin $plugin;
+    /**
+     * @var bool Whether the SEOmatic plugin for Craft is enabled
+     * * @see https://plugins.craftcms.com/seomatic
+     */
+    public bool $isSeomaticEnabled = false;
+
+    /**
+     * @var bool Whether the Neo plugin for Craft is installed
+     * @see https://plugins.craftcms.com/neo
+     */
+    public bool $isNeoInstalled = false;
+
+    /**
+     * @var bool Whether the Neo plugin for Craft is enabled
+     * @see https://plugins.craftcms.com/neo
+     *
+     * @var bool
+     */
+    public bool $isNeoEnabled = false;
+
+    /**
+     * @var bool Whether the installed Neo plugin version has an issue where
+     * Neo Block fields can return duplicate blocks in some scenarios.
+     * @see https://github.com/spicywebau/craft-neo/issues/387
+     *
+     * @var bool
+     */
+    public bool $neoVersionHasDuplicatesIssue = false;
 
     // =Public Methods
     // =========================================================================
@@ -121,6 +162,9 @@ class Tailor extends Plugin
         // store reference to plugin instance
         self::$plugin = $this;
 
+        // collect useful information about available plugins
+        $this->loadPluginsInfo();
+
         // register twig extensions provided by the plugin
         $extension = new TailorTwigExtension();
         Craft::$app->view->registerTwigExtension($extension);
@@ -133,6 +177,20 @@ class Tailor extends Plugin
                 /** @var CraftVariable $variable */
                 $variable = $e->sender;
                 $variable->set('tailor', TailorVariable::class);
+            }
+        );
+
+        Event::on(
+            Elements::class,
+            Elements::EVENT_BEFORE_EAGER_LOAD_ELEMENTS,
+            function( EagerLoadElementsEvent $event )
+            {
+                $elementType = $event->elementType;
+                $sourceElements = $event->elements;
+
+                // only include eager-loadable plans
+                $event->with = ContentHelper::selectEagerLoadingPlans(
+                    $elementType, $sourceElements, $event->with);
             }
         );
     }
@@ -162,5 +220,40 @@ class Tailor extends Plugin
     public function getAjax(): Ajax
     {
         return $this->get('ajax');
+    }
+
+    // =Protected Methods
+    // =========================================================================
+
+    /**
+     * @inheritdoc
+     */
+    protected function createSettingsModel(): Model
+    {
+        return new Settings();
+    }
+
+    /**
+     * Collect useful information about available plugins
+     *
+     * @return void
+     */
+    protected function loadPluginsInfo()
+    {
+        $craftPlugins = Craft::$app->getPlugins();
+
+        $this->isNeoInstalled = $craftPlugins->isPluginInstalled('neo');
+        $this->isNeoEnabled = $craftPlugins->isPluginEnabled('neo');
+        $this->neoVersionHasDuplicatesIssue = false;
+
+        if ($this->isNeoInstalled)
+        {
+            $neoPlugin = $craftPlugins->getPlugin('neo');
+            $neoVersion = AppHelper::normalizeVersion($neoPlugin->getVersion());
+            $this->neoVersionHasDuplicatesIssue = version_compare($neoVersion, '2.8.10', '<');
+        }
+
+        $this->isSeomaticInstalled = $craftPlugins->isPluginInstalled('seomatic');
+        $this->isSeomaticEnabled = $craftPlugins->isPluginEnabled('seomatic');
     }
 }

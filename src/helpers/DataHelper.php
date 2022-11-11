@@ -20,10 +20,13 @@ use yii\db\Query;
 
 use Craft;
 use craft\models\Site;
+use craft\errors\InvalidFieldException;
 use craft\helpers\ArrayHelper;
 
 use benf\neo\elements\Block as NeoBlock;
 use benf\neo\elements\db\BlockQuery as NeoBlockQuery;
+
+use yoannisj\tailor\Tailor;
 
 /**
  *
@@ -39,12 +42,38 @@ class DataHelper
      */
 
     const FETCH_METHOD_ALL = 'all';
+    const FETCH_METHOD_COLLECT = 'collect';
     const FETCH_METHOD_COUNT = 'count';
     const FETCH_METHOD_EXISTS = 'exists';
+    const FETCH_METHOD_IDS = 'ids';
     const FETCH_METHOD_ONE = 'one';
     const FETCH_METHOD_FIRST = 'first';
     const FETCH_METHOD_LAST = 'last';
     const FETCH_METHOD_NTH = 'nth';
+    const FETCH_METHOD_SCALAR = 'scalar';
+    const FETCH_METHOD_SUM = 'sum';
+    const FETCH_METHOD_AVERAGE = 'average';
+    const FETCH_METHOD_MIN = 'min';
+    const FETCH_METHOD_MAX = 'max';
+    const FETCH_METHOD_PAIRS = 'pairs';
+
+    const SUPPORTED_FETCH_METHODS = [
+        self::FETCH_METHOD_ALL,
+        self::FETCH_METHOD_COLLECT,
+        self::FETCH_METHOD_COUNT,
+        self::FETCH_METHOD_EXISTS,
+        self::FETCH_METHOD_IDS,
+        self::FETCH_METHOD_ONE,
+        self::FETCH_METHOD_FIRST,
+        self::FETCH_METHOD_LAST,
+        self::FETCH_METHOD_NTH,
+        // self::FETCH_METHOD_SCALAR,
+        // self::FETCH_METHOD_SUM,
+        // self::FETCH_METHOD_AVERAGE,
+        // self::FETCH_METHOD_MIN,
+        // self::FETCH_METHOD_MAX,
+        // self::FETCH_METHOD_PAIRS,
+    ];
 
     // =Methods
     // ========================================================================
@@ -88,7 +117,7 @@ class DataHelper
 
         try {
             $value = ArrayHelper::getValue($data, $key);
-        } catch (UnknownPropertyException $e) {
+        } catch (UnknownPropertyException|InvalidFieldException $e) {
             $value = null;
         }
 
@@ -102,15 +131,16 @@ class DataHelper
     /**
      * Shortcut to execute a database Query fetch operation on given object or 
      * associative array property value.
-     * Supports nested property values by using dot notation.
-     * Accepts a list of prefered property names (will use first property that is set).
-     * Supports eager-loaded property values, by filtering items according to given fetch method.
+     * The `$key` argument can be a list of property names (in order of preference)
+     * and supports nested property values by using dot notation.
+     * If the property has been eager-loaded, the results won't be fetched again,
+     * but they will be filtered to simulate the fetch `$method`.
      *
-     * @param array|object $data object or associative array to access
-     * @param string|array $key name of property on which to run the fetch method
-     * @param bool $allowEmpty (optional) whether empty property values can be considered
-     * @param string $method Fetch method to use
-     * @param args.. arguments passed to the fetch method (after property value)
+     * @param array|object $data Object or associative array to access
+     * @param string|array $key Name of property on which to run the fetch method
+     * @param bool $allowEmpty Ahether empty property values can be considered (omittable)
+     * @param string $method Fetch method to use ('one', 'all', 'count', 'exists', 'ids')
+     * @param args... arguments passed to the fetch method (after property value)
      *
      * @return mixed Fetch results
      */
@@ -133,15 +163,7 @@ class DataHelper
             throw new InvalidArgumentException('Argument `method` must be a fetch method name');
         }
 
-        if (!in_array($method, [
-            self::FETCH_METHOD_ALL,
-            self::FETCH_METHOD_COUNT,
-            self::FETCH_METHOD_EXISTS,
-            self::FETCH_METHOD_ONE,
-            self::FETCH_METHOD_FIRST,
-            self::FETCH_METHOD_LAST,
-            self::FETCH_METHOD_NTH,
-        ])) {
+        if (!in_array($method, self::SUPPORTED_FETCH_METHODS)) {
             throw new InvalidArgumentException('Fetch `method` "'.$method.'" is not supported.');
         }
 
@@ -155,34 +177,34 @@ class DataHelper
     }
 
     /**
-     * Fetches all resutlfs for given query.
-     * Supports eager-loaded list of values.
+     * Fetches all results for given query.
+     * Supports collected values and eager-loaded list of values.
      *
      * @param array|Query|Collection|null $query the base query used to fetch results
      * @param array $criteria
      *
      * @return array
-     * 
-     * @todo: Remove workaround for Neo issue #387 once it is fixed
-     */
+    **/
 
-    public static function fetchAll( array|Query|Collection|null $query, array $criteria = null ): array
+    public static function fetchAll( array|Query|Collection|null $query,
+        array $criteria = null
+    ): array
     {
-        if (empty($query)) return [];
+        if (!$query) return [];
 
         if ($query instanceof Collection) {
-            $query = $query->all(); // work with underlying array to apply given criteria
+            $query = $query->all(); // continue with underlying array to apply given criteria
         }
 
         if (is_array($query) && ArrayHelper::isIndexed($query))
         {
-            $query = static::_cleanDuplicateNeoBlocks($query);
+            $results = static::_cleanDuplicateNeoBlocks($query);
 
             if ($criteria) {
-                $query = static::applyCriteriaToList($query, $criteria);
+                $results = static::applyCriteriaToList($query, $criteria);
             }
 
-            return $query;
+            return $results;
         }
 
         if ($query instanceof Query)
@@ -192,13 +214,14 @@ class DataHelper
             }
 
             $results = $query->all();
-            $results = static::_cleanDuplicateNeoBlocks($results);
 
-            // support eager loading for Neo Block queries
-            // @link https://github.com/spicywebau/craft-neo/blob/master/docs/eager-loading.md
-            if (Craft::$app->getPlugins()->isPluginInstalled('neo')
+            // enable eager loaded data for Neo Block queries
+            // @link https://github.com/spicywebau/craft-neo/blob/master/docs/eager loading.md
+            if (Tailor::$plugin->isNeoInstalled
                 && $query instanceof NeoBlockQuery)
             {
+                $results = static::_cleanDuplicateNeoBlocks($results);
+
                 foreach ($results as $block) {
                     $block->useMemoized($results);
                 }
@@ -208,6 +231,22 @@ class DataHelper
         }
 
         return [];
+    }
+
+    /**
+     * Fetches results in given query and returns it in a collection.
+     * Supports collected results and list of eager-loaded results.
+     *
+     * @param array|Query|Collection|null $query 
+     * @param array|null $criteria 
+     *
+     * @return Collection
+     */
+
+    public static function fetchCollect( array|Query|Collection|null $query,
+        array $criteria = null ): Collection
+    {
+        return Collection::make(static::fetchAll($query, $criteria));
     }
 
     /**
@@ -224,7 +263,7 @@ class DataHelper
     {
         if (empty($query)) return 0;
 
-        if ($query instanceof Collection) {
+        if ($query instanceof Query || $query instanceof Collection) {
             $query = $query->all(); // work with underlying array to apply given criteria
         }
 
@@ -290,6 +329,31 @@ class DataHelper
         }
 
         return false;
+    }
+
+    /**
+     * Undocumented function
+     *
+     * @param array|object|null $query 
+     * @param mixed $criteria 
+     *
+     * @return array
+     */
+    public static function fetchIds( array|object|null $query, array $criteria = null ): array
+    {
+        if ($query instanceof Query)
+        {
+            $ids = $query->ids();
+
+            if (Tailor::$plugin->neoVersionHasDuplicatesIssue) {
+                $ids = array_unique($ids);
+            }
+
+            return $ids;
+        }
+
+        $results = static::fetchAll($query, $criteria);
+        return ArrayHelper::getColumn($results, 'id');
     }
 
     /**
@@ -907,18 +971,20 @@ class DataHelper
 
     private static function _cleanDuplicateNeoBlocks( array $blocks ): array
     {
+        if (Tailor::$plugin->neoVersionHasDuplicatesIssue == false) {
+            return $blocks;
+        }
+
         $uniqueIds = [];
         $cleanBlocks = [];
 
         foreach ($blocks as $block)
         {
-            if (Craft::$app->getPlugins()->isPluginEnabled('neo')
-                && $block instanceof NeoBlock)
-            {
-                if (!in_array($block->id, $uniqueIds)) {
-                    $uniqueIds[] = $block->id;
-                    $cleanBlocks[] = $block;
-                }
+            if (!($block instanceof NeoBlock)) continue;
+
+            if (!in_array($block->id, $uniqueIds)) {
+                $uniqueIds[] = $block->id;
+                $cleanBlocks[] = $block;
             }
 
             else {
