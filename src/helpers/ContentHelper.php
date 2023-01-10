@@ -20,6 +20,7 @@ use craft\helpers\ArrayHelper;
 use craft\helpers\HtmlPurifier;
 
 use benf\neo\elements\Block as NeoBlock;
+use craft\helpers\StringHelper;
 use GraphQL\Exception\InvalidArgument;
 use verbb\supertable\elements\SuperTableBlockElement as SuperTableBlock;
 use verbb\vizy\fields\VizyField;
@@ -190,13 +191,15 @@ class ContentHelper
     }
 
     /**
-     * Undocumented function
+     * Parses given attribute access plans into list of normalized
+     * [[AttributeAccessPlan]] models. Returns `null` (meaning all attributes
+     * should be accessed), if given plans argument is `null` or `*`.
      *
-     * @param string|EagerLoadPlan[]|AttributeAccessPlan[] $plans 
+     * @param string|EagerLoadPlan[]|AttributeAccessPlan[]|null $plans 
      *
      * @return AttributeAccessPlan[]|null
      */
-    public static function createAttributeAccessPlans( string|array $plans ): ?array
+    public static function createAttributeAccessPlans( string|array $plans = null ): ?array
     {
         if ($plans === null || $plans === '*') {
             return null;
@@ -220,9 +223,15 @@ class ContentHelper
     public static function selectEagerLoadingPlans(
         string|ElementInterface $elementType,
         array $sourceElements,
-        array $plans
+        string|array $plans
     ): array
     {
+        if (is_string($plans)) {
+            $plans = StringHelper::split($plans);
+        }
+
+        if (empty($plans)) return [];
+
         $eagerLoadingPlans = [];
 
         foreach ($plans as $plan)
@@ -417,7 +426,7 @@ class ContentHelper
      */
     public static function textFromContent(
         YiiModel $model,
-        ?array $inAttributes = [],
+        string|array|null $inAttributes = [],
         array $options = [],
         array $info = null
     ): string|array
@@ -426,11 +435,12 @@ class ContentHelper
 
         if ($inAttributes !== null)
         {
-            if (empty($inAttributes)) return ''; // no fields => no text
+            // explicitly no fields => no text
+            if (empty($inAttributes)) return '';
 
             $plans = static::createAttributeAccessPlans($inAttributes);
 
-            if ($model instanceof ElementInterface
+            if ($plans && ($model instanceof ElementInterface)
                 && ($options['eagerLoad'] ?? true))
             {
                 // non eager loading plans will be discarded via internal event
