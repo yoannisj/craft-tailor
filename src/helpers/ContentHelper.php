@@ -47,7 +47,6 @@ class ContentHelper
     // =Public Methods
     // =========================================================================
 
-
     /**
      * Applies given options to text, and collects additional information
      * about the text.
@@ -66,7 +65,8 @@ class ContentHelper
 
         $transform = $options['transform'] ?? null;
         if (is_callable($transform)) {
-            $text = $transform($text, $model, $attribute);
+            // $text = $transform($text, $model, $attribute);
+            $text = $transform($text);
         }
 
         $length = mb_strlen($text);
@@ -375,7 +375,7 @@ class ContentHelper
     }
 
     /**
-     * Undocumented function
+     * Returns list of attributes storing text for given model
      *
      * @param YiiModel $model 
      *
@@ -449,8 +449,8 @@ class ContentHelper
             }
         }
 
-        $text = static::_textFromContent(
-            $model, static::_sortAttributeAccessPlans($plans), $options);
+        $plans = static::_sortAttributeAccessPlans($plans);
+        $text = static::_textFromContent($model, $plans, $options);
 
         $asMap = $options['asMap'] ?? false;
 
@@ -462,7 +462,7 @@ class ContentHelper
     }
 
     /**
-     * Undocumented function
+     * Returns text from given collection of Vizy Nodes
      *
      * @param VizyNodeCollection $nodes 
      * @param array $plans 
@@ -567,8 +567,10 @@ class ContentHelper
     // =Private Methods
     // =========================================================================
 
-     /**
-     * Undocumented function
+    /**
+     * Normalises given attribute access plans into list of AttributeAccesPlan
+     * models, and removes conflicting plans (i.e. plans which are excluded by
+     * other plans in the list).
      *
      * @param EagerLoadPlan[] $plans 
      *
@@ -769,7 +771,7 @@ class ContentHelper
     }
 
     /**
-     * Undocumented function
+     * Returns text data stored in given model's attribute
      *
      * @param YiiModel $model 
      * @param string $attribute 
@@ -896,7 +898,7 @@ class ContentHelper
     }
 
     /**
-     * Undocumented function
+     * Returns text data stored in given source element's relational attribute
      *
      * @param ElementInterface $source 
      * @param string $attribute 
@@ -933,6 +935,16 @@ class ContentHelper
         return $text;
     }
 
+    /**
+     * Creates a map of text data, where each attribute is mapped to the
+     * text data it stores.
+     *
+     * @param array $text Original text data
+     * @param array $options Options to create the map
+     * @param array|null $info Information about the text data in the map
+     *
+     * @return array
+     */
     private static function _mapText(
         array $text,
         array $options,
@@ -974,7 +986,7 @@ class ContentHelper
             else
             {
                 throw new InvalidArgument(
-                    "Argumaent `text` must contain only strings or nested text maps");
+                    "Argument `text` must contain only strings or nested text maps");
             }
 
             $map[$key] = $item;
@@ -993,6 +1005,15 @@ class ContentHelper
         return $map;
     }
 
+    /**
+     * Flattens given map of text data.
+     *
+     * @param array $map Map of text data to flatten
+     * @param array $options Options on how to flatted the text data
+     * @param array|null $info Info about the flattened text data
+     *
+     * @return string
+     */
     private static function _flattenText(
         array $map,
         array $options,
