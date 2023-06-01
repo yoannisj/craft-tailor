@@ -25,7 +25,8 @@ use craft\helpers\ArrayHelper;
 
 use benf\neo\elements\Block as NeoBlock;
 use benf\neo\elements\db\BlockQuery as NeoBlockQuery;
-
+use craft\helpers\StringHelper;
+use yii\base\BaseObject;
 use yoannisj\tailor\Tailor;
 
 /**
@@ -36,6 +37,13 @@ class DataHelper
 {
     // =Properties
     // ========================================================================
+
+    const PROP_ALIAS_PATTERN = '/^\+([a-zA-Z0-9_]+)(?::(.+))?$/';
+    const KEY_NTH_METHOD_PATTERN = '/^nth\((\d+)\)$/';
+
+    const ALLOW_EXISTING_PROPERTY = 'existingProperty';
+    const ALLOW_NON_NULL_VALUE = 'nonNullValue';
+    const ALLOW_NON_EMPTY_VALUE = 'nonEmptyValue';
 
     /**
      * @var List of supported fetch methods
@@ -57,12 +65,19 @@ class DataHelper
     const FETCH_METHOD_MAX = 'max';
     const FETCH_METHOD_PAIRS = 'pairs';
 
+    const MODEL_FETCH_METHODS = [
+        self::FETCH_METHOD_ONE,
+        self::FETCH_METHOD_FIRST,
+        self::FETCH_METHOD_LAST,
+        self::FETCH_METHOD_NTH,
+    ];
+
     const SUPPORTED_FETCH_METHODS = [
         self::FETCH_METHOD_ALL,
         self::FETCH_METHOD_COLLECT,
+        self::FETCH_METHOD_IDS,
         self::FETCH_METHOD_COUNT,
         self::FETCH_METHOD_EXISTS,
-        self::FETCH_METHOD_IDS,
         self::FETCH_METHOD_ONE,
         self::FETCH_METHOD_FIRST,
         self::FETCH_METHOD_LAST,
@@ -75,57 +90,253 @@ class DataHelper
         // self::FETCH_METHOD_PAIRS,
     ];
 
-    // =Methods
+    // =Public Methods
     // ========================================================================
 
+    // =Property Keys
+    // -------------------------------------------------------------------------
+
     /**
-     * Returns value for given object property name or array key.
-     * Supports nested properties using dot notation.
-     * Accepts a list of prefered property names (will return first property that is set).
+     * Parses given (list of) property key(s), and resolves included aliases,
+     * as defined in the `propertyAliases` setting.
      *
-     * @param object|array $data Object or associative array to access
-     * @param string|array $key Name of property/array key to return
-     * @param bool $allowEmpty Whether an empty value is satisfactory or not
-     * 
-     * @return mixed
+     * @param string|array $keys 
+     *
+     * @return string[]
      */
-
-    public static function prop( object|array $data, string|array $key,
-        bool $allowEmpty = true ): mixed
+    public static function parsePropKey(
+        string|array $keys,
+    ): array
     {
-        // // allow omitting the $default value
-        // if (is_bool($default) && is_null($allowEmpty))
-        // {
-        //     $allowEmpty = $default;
-        //     $default = null;
-        // }
+        $parsed = [];
+        $aliases = null;
 
-        // // make sure allow empty is a boolean
-        // if (is_null($allowEmpty)) $allowEmpty = false;
+        // support comma-separated list of keys
+        if (is_string($keys)) $keys = StringHelper::split($keys);
 
-        // support a list of keys (ordered by preference)
-        if (is_array($key))
+        foreach ($keys as $key)
         {
-            foreach ($key as $k)
-            {
-                $value = static::prop($data, $k, $allowEmpty);
-                if ($value !== null) return $value;
+            if (is_string($key)) {
+                $key = static::parsePropKeyPath($key);
             }
 
-            return null;
+            else if (!is_array($key))
+            {
+                throw new InvalidArgumentException(
+                    "Argument #1 `key` must be a string or array of strings");
+            }
+
+            $parsed = array_merge($parsed, array_map([self::class, 'parsePropKey'], $key));
         }
 
-        try {
-            $value = ArrayHelper::getValue($data, $key);
-        } catch (UnknownPropertyException|InvalidFieldException $e) {
-            $value = null;
+        return $parsed;
+    }
+
+    /**
+     * Parses a property key path (i.e. property key expressions nested
+     * in dot-notation) into ordered list of resolved key paths.
+     *
+     * @param string $keypath 
+     *
+     * @return array
+     */
+    private static function parsePropKeyPath( string $keypath ): array
+    {
+        $keys = explode('.', $keypath);
+        $parsed = [];
+        $aliases = null;
+
+        foreach ($keys as $levelKey)
+        {
+            // resolve keys on this level
+            $levelKeys = [];
+            
+            // resolve property alias in this key
+            $matches = [];
+            if (preg_match(static::PROP_ALIAS_PATTERN, $levelKey, $matches))
+            {
+                $alias = $matches[1];
+                $method = $matches[2] ?? null;
+
+                if ($aliases === null) {
+                    $aliases = Tailor::$plugin->getSettings()->propertyAliases;
+                }
+
+                if (!array_key_exists($alias, $aliases)) {
+                    throw new InvalidArgumentException("Could not find property alias '$alias'");
+                }
+
+                $levelKeys = static::parsePropKey($aliases[$alias]);
+                
+                if ($method)
+                {
+                    // inject method in each aliased key
+                    $levelKeys = array_map(function($k) use ($method) {
+                        $k = explode(':', $k)[0]; // replace any default method
+                        return $k.':'.$method; 
+                    }, $levelKeys);
+                }
+            }
+            
+            else {
+                $levelKeys = [ $levelKey ];
+            }
+            
+            // inject back into list of resolved paths
+            $paths = [];
+
+            foreach ($parsed as $path)
+            {
+                foreach ($levelKeys as $levelKey) {
+                    $paths[] = $path.'.'.$levelKey;
+                }
+            }
+
+            $parsed = $paths;
         }
 
-        if (!$allowEmpty && empty($value)) {
-            return null;
+        return $parsed;
+    }
+
+    /**
+     * Parses property key expression (e.g. 'key:method(arg)')
+     *
+     * @param string $keyMethod The method to parse (after the ':' character in the full property key)
+     * @param string $key The key to which the parsed method is attached (before the ':' character)
+     *
+     * @return array with keys 'property', 'method', 'args'
+     */
+    public static function parsePropKeyExpression( string $expression )
+    {
+        $parts = explode(':', $expression);
+        $property = $parts[0];
+        $keyMethod = $parts[1] ?? null;
+
+        if ($keyMethod) {
+            return static::_parseKeyMethod($keyMethod, $property);
         }
 
-        return $value;
+        return $parsed = [
+            'property' => $property,
+            'method' => null,
+            'args' => null,
+        ];
+    }
+
+    // =Property Values
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns value contained by given property key in data object or
+     * associative array.
+     * 
+     * The `$key` argument supports property key aliases, dot notation, key
+     * expressions, and any combination thereof.
+     * 
+     * If $key resolves to a list of keys, this will return the value for the
+     * first key holding one allowed by `$options`.
+     * 
+     * The `$options` argument supports the following keys:
+     * - 'asText' Whether property value should be casted to text
+     * - 'allowEmpty' Whether empty value should be returned
+     * - 'fetchMethod' If and how to fetch model value(s) from the DB
+     * - 'fetchArgs' Arguments passed on to the model fetching method
+     * 
+     * Note: if '$key' is using a dot-notation to check nested properties, the
+     * 'fetchMethod' and 'fetchArgs' options apply to the deepest property only.
+     * 
+     * @see [[static::parsePropKey]]
+     *
+     * @param array|object $data 
+     * @param string $key 
+     * @param array $options 
+     *
+     * @return mixed
+     */
+    public static function propertyValue(
+        array|object $data,
+        string|array $key,
+        array $options
+    ): mixed
+    {
+        $asText = $options['asText'] ?? false;
+        $allowEmpty = $options['allowEmpty'] ?? false;
+
+        // support key aliases, as well as a list of preferred keys
+        $keys = static::parsePropKey($key);
+
+        foreach ($keys as $key)
+        {
+            $foundKey = false;
+            $value = static::_checkPropertyValue($data, $key, $options, $foundKey);
+
+            // cast value to string? (may result in an empty string...)
+            if ($asText) {
+                $value = (string)$value;
+            }
+
+            if (!$allowEmpty && empty($value)) {
+                continue;
+            }
+
+            else if ($value !== null) {
+                return $value; // return first key that returned an actual value
+            }
+        }
+
+        return null; // no key returned any allowed value
+    }
+
+    /**
+     * Returns list of values stored under given key (delegating to [[static::propertyValue]])
+     * for eachitem in a set of data objects or assiciative arrays.
+     * 
+     * :::Tip
+     * This method preserves the key for each item in $dataset
+     * :::
+     *
+     * @param array $dataset 
+     * @param string $key 
+     * @param array $options 
+     *
+     * @return array
+     */
+    public static function getColumn(
+        array $dataset,
+        string|array $key,
+        array $options = []
+    ): array
+    {
+        $values = [];
+
+        foreach ($dataset as $rowKey => $data) {
+            $values[$rowKey] = static::propertyValue($data, $key, $options);
+        }
+
+        return $values;
+    }
+
+    // =Fetching
+    // -------------------------------------------------------------------------
+
+    /**
+     * Checks whether given value is a fetchable data-set.
+     *
+     * @param array|object $data Value to check
+     *
+     * @return bool
+     */
+    public static function isFetchable( mixed $data ): bool
+    {
+        // indexed array is "fetchable"
+        if (is_array($data) && isset($data[0])) return true;
+
+        // queries and collections are fetchable
+        if (is_object($data)) {
+            return ($data instanceof Query || $data instanceof Collection);
+        }
+
+        return false;
     }
 
     /**
@@ -138,15 +349,18 @@ class DataHelper
      *
      * @param array|object $data Object or associative array to access
      * @param string|array $key Name of property on which to run the fetch method
-     * @param bool $allowEmpty Ahether empty property values can be considered (omittable)
+     * @param bool $allowEmpty Whether empty property values can be considered (omittable)
      * @param string $method Fetch method to use ('one', 'all', 'count', 'exists', 'ids')
      * @param args... arguments passed to the fetch method (after property value)
      *
      * @return mixed Fetch results
      */
 
-    public static function fetchProp( array|object $data, string|array $key,
-        string|bool $allowEmpty, string $method = null ): mixed
+    public static function fetchProp(
+        array|object $data, string|array $key,
+        string|bool $allowEmpty,
+        string $method = null 
+    ): mixed
     {
         $args = func_get_args();
         $fetchArgsStart = 4;
@@ -186,7 +400,8 @@ class DataHelper
      * @return array
     **/
 
-    public static function fetchAll( array|Query|Collection|null $query,
+    public static function fetchAll(
+        array|Query|Collection|null $query,
         array $criteria = null
     ): array
     {
@@ -243,8 +458,10 @@ class DataHelper
      * @return Collection
      */
 
-    public static function fetchCollect( array|Query|Collection|null $query,
-        array $criteria = null ): Collection
+    public static function fetchCollect(
+        array|Query|Collection|null $query,
+        array $criteria = null
+    ): Collection
     {
         return Collection::make(static::fetchAll($query, $criteria));
     }
@@ -259,7 +476,10 @@ class DataHelper
      * @return integer
      */
 
-    public static function fetchCount( array|Query|Collection|null $query, array $criteria = null ): int
+    public static function fetchCount(
+        array|Query|Collection|null $query,
+        array $criteria = null
+    ): int
     {
         if (empty($query)) return 0;
 
@@ -297,7 +517,10 @@ class DataHelper
      * @return bool
      */
 
-    public static function fetchExists( array|Query|Collection|null $query, array $criteria = null ): bool
+    public static function fetchExists(
+        array|Query|Collection|null $query,
+        array $criteria = null
+    ): bool
     {
         if (empty($query)) return false;
 
@@ -339,7 +562,10 @@ class DataHelper
      *
      * @return array
      */
-    public static function fetchIds( array|object|null $query, array $criteria = null ): array
+    public static function fetchIds(
+        array|object|null $query,
+        array $criteria = null
+    ): array
     {
         if ($query instanceof Query)
         {
@@ -368,7 +594,10 @@ class DataHelper
      * @todo: support scalar results
      */
 
-    public static function fetchOne( array|object|null $query, array $criteria = null ): mixed
+    public static function fetchOne(
+        array|object|null $query,
+        array $criteria = null
+    ): mixed
     {
         if (empty($query)) return null;
 
@@ -415,7 +644,10 @@ class DataHelper
      * @alias for `fetchOne()`
      */
 
-    public static function fetchFirst( array|object|null $query, array $criteria = null ): mixed
+    public static function fetchFirst(
+        array|object|null $query,
+        array $criteria = null
+    ): mixed
     {
         return static::fetchOne($query, $criteria);
     }
@@ -430,7 +662,10 @@ class DataHelper
      * @return mixed
      */
 
-    public static function fetchLast( array|object|null $query, array $criteria = null ): mixed
+    public static function fetchLast(
+        array|object|null $query,
+        array $criteria = null
+    ): mixed
     {
         if (empty($query)) return null;
 
@@ -476,7 +711,10 @@ class DataHelper
      */
 
     public static function fetchNth(
-        array|object|null $query, int $index, array $criteria = null ): mixed
+        array|object|null $query,
+        int $index,
+        array $criteria = null
+    ): mixed
     {
         if (empty($query)) return null;
 
@@ -508,13 +746,17 @@ class DataHelper
     /**
      * Filters given list of conditions, removing conditions that
      * check against empty values.
+     * 
+     * @todo: keep conditions mapping to empty non-null values?
      *
      * @param array $conditions
      *
      * @return array
      */
 
-    public static function filterConditions( array $conditions ): array
+    public static function filterConditions(
+        array $conditions
+    ): array
     {
         $res = [];
 
@@ -544,7 +786,10 @@ class DataHelper
      */
 
     public static function whereMultiple(
-        array|Query|Collection|null $items, array $conditions, bool $strict = false ): array
+        array|Query|Collection|null $items,
+        array $conditions,
+        bool $strict = false
+    ): array
     {
         if ($items instanceof Query || $items instanceof Collection) {
             $items = $items->all();
@@ -571,8 +816,15 @@ class DataHelper
      */
 
     public static function firstWhereMultiple(
-        array|Query|Collection|null $items, array $conditions, bool $strict = false ): mixed
+        array|Query|Collection|null $items,
+        array $conditions,
+        bool $strict = false
+    ): mixed
     {
+        // if ($items instanceof Query) {
+        //     return $items->andWhere($conditions)->one();
+        // }
+
         if ($items instanceof Query || $items instanceof Collection) {
             $items = $items->all();
         }
@@ -625,7 +877,11 @@ class DataHelper
      * @return bool
      */
 
-    public static function checkProperties( array|object $data, array $conditions, bool $strict = false ): bool
+    public static function checkProperties(
+        array|object $data,
+        array $conditions,
+        bool $strict = false
+    ): bool
     {
         foreach ($conditions as $key => $value)
         {
@@ -649,7 +905,11 @@ class DataHelper
      */
 
     public static function checkProperty(
-        array|object $data, string|array $key, mixed $value, bool $strict = false ): bool
+        array|object $data,
+        string|array $key,
+        mixed $value,
+        bool $strict = false
+    ): bool
     {
         $dataValue = static::prop($data, $key);
 
@@ -892,7 +1152,11 @@ class DataHelper
      */
 
     public static function filterableData(
-        array $items, string $index, string $criteria, array $columns = null ): array
+        array $items,
+        string $index,
+        string $criteria,
+        array $columns = null
+    ): array
     {
         $results = [];
         $allCriteria = [];
@@ -954,11 +1218,218 @@ class DataHelper
         return $results;
     }
 
-    // =Protected Methods
+    // =Deprecated
     // -------------------------------------------------------------------------
 
+    /**
+     * Returns value for given object property name or array key.
+     * Supports nested properties using dot notation.
+     * Accepts a list of prefered property names (will return first property that is set).
+     *
+     * @param object|array $data Object or associative array to access
+     * @param string|array $key Name of property/array key to return
+     * @param bool $allowEmpty Whether an empty value is satisfactory or not
+     * 
+     * @return mixed
+     */
+
+     public static function prop(
+        object|array $data,
+        string|array $key,
+        bool $allowEmpty = true
+    ): mixed
+    {
+        // // allow omitting the $default value
+        // if (is_bool($default) && is_null($allowEmpty))
+        // {
+        //     $allowEmpty = $default;
+        //     $default = null;
+        // }
+
+        // // make sure allow empty is a boolean
+        // if (is_null($allowEmpty)) $allowEmpty = false;
+
+        // support a list of keys (ordered by preference)
+        if (is_array($key))
+        {
+            foreach ($key as $k)
+            {
+                $value = static::prop($data, $k, $allowEmpty);
+                if ($value !== null) return $value;
+            }
+
+            return null;
+        }
+
+        try {
+            $value = ArrayHelper::getValue($data, $key);
+        } catch (UnknownPropertyException|InvalidFieldException $e) {
+            $value = null;
+        }
+
+        if (!$allowEmpty && empty($value)) {
+            return null;
+        }
+
+        return $value;
+    }
+
+    // =Protected Methods
+    // ========================================================================
+
     // =Private Methods
-    // -------------------------------------------------------------------------
+    // ========================================================================
+
+    /**
+     * Checks if a property exists on given data object or associative array,
+     * and returns value if it does.
+     * 
+     * The main use for this method is to inspect nested property keys with
+     * dot-notation, and/or to fetch nested models with the 'key:method(arg)`
+     * expression. For example:
+     * 
+     * ```php
+     * $value = DataHelper::checkPropertyValue($entry, 'children.relatedEntries:nth(2))`
+     * ```
+     *
+     * @param array|object $data 
+     * @param string $key 
+     * @param array $options 
+     * @param bool $foundKey 
+     *
+     * @return mixed
+     */
+    private static function _checkPropertyValue(
+        array|object $data,
+        string $key,
+        array $options,
+        bool &$foundKey = false
+    ): mixed
+    {
+        if (empty($key))
+        {
+            $foundKey = false;
+            return null;
+        }
+    
+        $keypath = explode('.', $key);
+        $levels = count($keypath);
+        $level = 0;
+
+        while (($key = array_shift($keypath)))
+        {
+            $isDeepestKey = ($level == $levels - 1);
+            list($property, $method, $args) = static::parsePropKeyExpression($key);
+
+            if (is_array($data))
+            {
+                if (!array_key_exists($property, $data)) {
+                    $foundKey = false;
+                    return null;
+                }
+
+                $data = $data[$key];
+            }
+
+            // maybe previous key pointed to a scalar value
+            else if (!is_object($data)) {
+                $foundKey = false; // which don't have properties...
+                return null;
+            }
+
+            else if ($data instanceof BaseObject)
+            {
+                if (!$data->canGetProperty($property, true)) {
+                    $foundKey = false;
+                    return null;
+                }
+
+                $data = $data->$property;
+            }
+
+            else
+            {
+                if (!property_exists($data, $property)) {
+                    $foundKey = false;
+                    return null;
+                }
+
+                $data = $data->$property;
+            }
+
+            // fetch data model along the way?
+            if ($isDeepestKey)
+            {
+                if (!$method) $method = $options['fetchMethod'] ?? null;
+
+                if ($method && !in_array($method, self::SUPPORTED_FETCH_METHODS)) {
+                    throw new InvalidArgumentException("Invalid property fetching method '$method'");
+                }
+
+                if (!$args) $args = $options['fetchArgs'] ?? [];
+            }
+
+            if ($method && static::isFetchable($data))
+            {
+                $callable = [ self::class, 'fetch'.ucfirst($method)];
+                $data = forward_static_call_array($callable, $args);
+            }
+
+            $level++;
+        }
+
+        $allowEmpty = $options['allowEmpty'] ?? false;
+
+        if (!$allowEmpty && empty($data)) {
+            return null;
+        }
+
+        return $data;
+    }
+
+    /**
+     * Parses fetching method from property key epression (e.g. 'key:method(args...)')
+     *
+     * @param string $method The method to parse from the expression (after the ':' character)
+     * @param string $key The key name in the expression (before the ':' character)
+     *
+     * @return array
+     */
+    private static function _parseKeyMethod( string $method, string $property = '' ): array
+    {
+        $name = $method;
+        $args = [];
+
+        if (strncmp($method, 'nth', 3) === 0)
+        {
+            $name = substr($method, 0, 3);
+
+            $matches = [];
+            if (!preg_match(self::KEY_NTH_METHOD_PATTERN, $method, $matches)) {
+                throw new InvalidArgumentException(
+                    "Property key expression '{$property}:{$method}' is missing argument #1 `index`");
+            }
+
+            $keyIndex = $matches[1] ?? null;
+            if (!is_numeric($keyIndex)) {
+                throw new InvalidArgumentException(
+                    "Argument #1 `index` in property key expression '{$property}:{$method}' must be a number");
+            }
+
+            $args[] = (int)$keyIndex;
+        }
+
+        if (!in_array($name, self::MODEL_FETCH_METHODS)) {
+            throw new InvalidArgumentException(
+                "Method in property key expression '{$property}:{$method}' must return a model");
+        }
+
+        return [
+            'property' => $property,
+            'method' => $name,
+            'args' => $args,
+        ];
+    }
 
     /** 
      * Work around bug with eager-loaded neo queries returning duplicate blocks
@@ -994,5 +1465,80 @@ class DataHelper
 
         return $cleanBlocks;
     }
+
+
+
+
+
+        // /**
+    //  * Checks if property key can be accessed on given data object or
+    //  * associative array.
+    //  * 
+    //  * :::Tip
+    //  * The `$key` argument supports dot-notation to check nested properties.
+    //  * :::
+    //  *
+    //  * @param array|object $data Data to check
+    //  * @param string $key Property key to check
+    //  *
+    //  * @return bool
+    //  */
+    // public static function hasProperty(
+    //     array|object $data,
+    //     string $key,
+    //     mixed &$value = null,
+    // ): bool
+    // {
+    //     if (empty($key)) return false;
+
+    //     $keys = explode('.', $key);
+
+    //     while (($key = array_shift($keys)))
+    //     {
+    //         if (is_array($data))
+    //         {
+    //             if (!array_key_exists($key, $data)) {
+    //                 return false;
+    //             } else {
+    //                 $data = $data[$key];
+    //             }
+    //         }
+
+    //         // maybe nested property holds a scalar value...
+    //         else if (!is_object($data)) {
+    //             return false; // which don't have properties
+    //         }
+
+    //         else if ($data instanceof BaseObject)
+    //         {
+    //             if (!$data->canGetProperty($key, true)) {
+    //                 return false;
+    //             } else {
+    //                 $data = $data->$key;
+    //             }
+    //         }
+
+    //         else if (!property_exists($data, $key)) {
+    //             return false;
+    //         }
+
+    //         else {
+    //             $data = $data->$key;
+    //         }
+    //     }
+
+    //     $value = $data; // in case calling context wants to know
+    //     return true;
+
+    //     // if (is_array($data)) {
+    //     //     return array_key_exists($key, $data);
+    //     // }
+
+    //     // if ($data instanceof BaseObject) {
+    //     //     return $data->canGetProperty($key, true);
+    //     // }
+
+    //     // return property_exists($data, $key);
+    // }
 
 }
